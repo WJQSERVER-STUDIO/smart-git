@@ -72,7 +72,7 @@ jobs:
           mkdir ${{ env.OUTPUT_BINARY }}d
           cp ${{ env.OUTPUT_BINARY }}-${{matrix.goos}}-${{matrix.goarch}} ./${{ env.OUTPUT_BINARY }}d/
           mv ./${{ env.OUTPUT_BINARY }}d/${{ env.OUTPUT_BINARY }}-${{matrix.goos}}-${{matrix.goarch}} ./${{ env.OUTPUT_BINARY }}d/${{ env.OUTPUT_BINARY }}
-          cp LICENSE ./${{ env.OUTPUT_BINARY }}/
+          cp -v LICENSE ./${{ env.OUTPUT_BINARY }}d/
           tar -czf ${{ env.OUTPUT_BINARY }}-${{matrix.goos}}-${{matrix.goarch}}.tar.gz -C ${{ env.OUTPUT_BINARY }}d .
           ls
 
