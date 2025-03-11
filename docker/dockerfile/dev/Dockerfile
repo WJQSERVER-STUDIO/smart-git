@@ -24,8 +24,6 @@ RUN wget -O /usr/local/bin/init.sh https://raw.githubusercontent.com/${USER}/${R
 
 # 拉取配置
 RUN wget -O /data/${APPLICATION}/config.toml https://raw.githubusercontent.com/${USER}/${REPO}/dev/config/config.toml
-RUN wget -O /data/${APPLICATION}/blacklist.json https://raw.githubusercontent.com/${USER}/${REPO}/dev/config/blacklist.json
-RUN wget -O /data/${APPLICATION}/whitelist.json https://raw.githubusercontent.com/${USER}/${REPO}/dev/config/whitelist.json
 
 # 权限
 RUN chmod +x /data/${APPLICATION}/${APPLICATION}
