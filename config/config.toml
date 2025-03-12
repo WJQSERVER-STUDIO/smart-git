@@ -1,0 +1,15 @@
+[server]
+host = "0.0.0.0" 
+port = 8080 
+baseDir = "/data/smart-git/repos"
+
+[log]
+logfilepath = "/data/smart-git/log/smart-git.log" 
+maxlogsize = 5 # MB
+
+[Database]
+path = "/data/smart-git/db/smart-git.db"
+
+[cache]
+expire = "1h"
+expireEx = "10m"
