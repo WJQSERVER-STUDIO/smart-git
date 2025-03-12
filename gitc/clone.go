@@ -24,7 +24,7 @@ var (
 	logError   = logger.LogError
 )
 
-func CloneRepo(dir string, userName string, repoName string, repoUrl string, cfg *config.Config) {
+func CloneRepo(dir string, userName string, repoName string, repoUrl string, cfg *config.Config) error {
 	repoPath := dir
 
 	// 预检测文件夹问题: 检查目录是否已经存在
@@ -38,7 +38,7 @@ func CloneRepo(dir string, userName string, repoName string, repoUrl string, cfg
 			err = os.RemoveAll(repoPath)
 			if err != nil {
 				logError("移除无效仓库目录失败: %v\n", err)
-				return
+				return err
 			}
 			// 继续克隆
 		} else {
@@ -53,7 +53,7 @@ func CloneRepo(dir string, userName string, repoName string, repoUrl string, cfg
 			expireTime, headHash, err = GetRepoExpireInfo(userName, repoName)
 			if err != nil {
 				logError("获取仓库过期时间失败: %v\n", err)
-				return
+				return err
 			}
 			if expireTime.Before(time.Now()) {
 				// 过期
@@ -62,7 +62,7 @@ func CloneRepo(dir string, userName string, repoName string, repoUrl string, cfg
 				remoteHeadHash, err := GetRemoteHeadHash(repoUrl)
 				if err != nil {
 					logError("获取远程仓库 HEAD 失败: %v\n", err)
-					return
+					return err
 				}
 				if remoteHeadHash == headHash {
 					logInfo("仓库 '%s' 已经存在, 超过过期时间, 但 hash 是最新的。\n", repoPath)
@@ -70,26 +70,26 @@ func CloneRepo(dir string, userName string, repoName string, repoUrl string, cfg
 					err = UpdateRepoData(repoUrl, userName, repoName, cfg.Cache.ExpireEx)
 					if err != nil {
 						logError("保存仓库数据失败: %v\n", err)
-						return
+						return err
 					}
-					return // 仓库未过期，直接使用
+					return nil // 仓库未过期，直接使用
 				}
 				logInfo("仓库 '%s' 已过期。移除并重新克隆。\n", repoPath)
 				err = os.RemoveAll(repoPath)
 				if err != nil {
 					logError("移除过期仓库失败: %v\n", err)
-					return
+					return err
 				}
 				// 继续克隆
 			} else {
 				logInfo("仓库 '%s' 已经存在且是最新的。\n", repoPath)
-				return // 仓库未过期，直接使用
+				return nil // 仓库未过期，直接使用
 			}
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		// os.Stat 错误，不是目录不存在
 		logError("检查目录 '%s' 时出错: %v\n", repoPath, err)
-		return
+		return err
 	}
 	// 如果目录不存在，或者因为过期或无效仓库而被移除，则克隆它
 
@@ -100,12 +100,13 @@ func CloneRepo(dir string, userName string, repoName string, repoUrl string, cfg
 	})
 	if err != nil {
 		logError("克隆仓库 '%s' 失败: %v\n", repoUrl, err)
-		return
+		return err
+
 	} else {
 		err := AddCloneCount(userName, repoName)
 		if err != nil {
 			logError("增加克隆次数失败: %v\n", err)
-			return
+			return err
 		}
 	}
 
@@ -113,7 +114,7 @@ func CloneRepo(dir string, userName string, repoName string, repoUrl string, cfg
 	err = SaveRepoData(repoUrl, userName, repoName, cfg.Cache.Expire)
 	if err != nil {
 		logError("保存仓库数据失败: %v\n", err)
-		return
+		return err
 	}
 
 	/*
@@ -127,6 +128,8 @@ func CloneRepo(dir string, userName string, repoName string, repoUrl string, cfg
 	       }
 	   }()
 	*/
+
+	return nil
 }
 
 // GetRemoteHeadHash 函数用于获取远程仓库 HEAD 指向的 commit hash
