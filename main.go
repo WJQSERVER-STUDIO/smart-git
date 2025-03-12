@@ -60,10 +60,11 @@ func init() {
 	}
 
 	database.SetDBInfo(cfg)
-
 }
 
 func main() {
+
+	defer database.DB.Close()
 
 	// 运行HTTP Git Server
 	err := RunHTTP(":8080", cfg.Server.BaseDir)

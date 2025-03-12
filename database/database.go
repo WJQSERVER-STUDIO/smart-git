@@ -18,6 +18,7 @@ type DataAccess interface {
 	SaveSumData(*schema.RepoSumData) error
 	GetSumData(string, string) (*schema.RepoSumData, bool, error)
 	GetAllSumData() ([]schema.RepoSumData, error)
+	Close()
 }
 
 func SetDBInfo(cfg *config.Config) {

@@ -117,6 +117,7 @@ func AddCloneCount(repoUser string, repoName string) error {
 	err = database.DB.SaveSumData(repoSumData)
 	if err != nil {
 		logError("Fail to save repo sum data: %v\n", err)
+		return err
 	}
 	return nil
 }

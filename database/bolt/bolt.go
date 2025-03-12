@@ -23,3 +23,11 @@ func OpenDatabase(dbFilePath string) *Storage {
 	}
 	return &Storage{db: db}
 }
+
+// Close 关闭 BoltDB
+func (s *Storage) Close() {
+	err := s.db.Close()
+	if err != nil {
+		logError("Failed to close BoltDB: %s", err)
+	}
+}
