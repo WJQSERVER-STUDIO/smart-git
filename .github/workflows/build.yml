@@ -45,8 +45,8 @@ jobs:
         goos: [linux]
         goarch: [amd64, arm64]
     env:
-      OUTPUT_BINARY: go
-      GO_VERSION: 1.23.5
+      OUTPUT_BINARY: smart-git
+      GO_VERSION: 1.24
 
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build  # 确保这个作业在 build 作业完成后运行
     env:
-      IMAGE_NAME: user/image  # 定义镜像名称变量
+      IMAGE_NAME: wjqserver/smart-git
       DOCKERFILE: docker/dockerfile/release/Dockerfile  # 定义 Dockerfile 路径变量
 
     steps:
