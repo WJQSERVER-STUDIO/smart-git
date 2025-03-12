@@ -31,7 +31,7 @@ import (
 // 返回值:
 //   - error: 如果服务器启动失败，则返回错误信息。
 func RunHTTP(addr string, baseRepoDir string) error {
-	log.Printf("Starting HTTP server on addr '%s'\n", addr)
+	logError("Starting HTTP server on addr '%s'\n", addr)
 
 	r := fiber.New()
 	r.Use(loggin.Middleware()) // 添加请求日志记录中间件
@@ -40,15 +40,15 @@ func RunHTTP(addr string, baseRepoDir string) error {
 	r.Get("/:user/:repo/info/refs", httpInfoRefs(baseRepoDir))             // 处理仓库引用信息请求
 	r.Post("/:user/:repo/git-upload-pack", httpGitUploadPack(baseRepoDir)) // 处理 git-upload-pack 请求
 
-	// debug触发器
-	r.Get("/debug/all", func(c *fiber.Ctx) error {
+	// info获取
+	r.Get("/api/db/data", func(c *fiber.Ctx) error {
 		allData, err := database.DB.GetAllData()
 		if err != nil {
 			return err
 		}
 		return c.JSON(allData)
 	})
-	r.Get("/debug/sum", func(c *fiber.Ctx) error {
+	r.Get("/api/db/sum", func(c *fiber.Ctx) error {
 		allData, err := database.DB.GetAllSumData()
 		if err != nil {
 			return err
@@ -58,13 +58,14 @@ func RunHTTP(addr string, baseRepoDir string) error {
 
 	// 404 路由处理
 	r.Use(func(c *fiber.Ctx) error {
+		logInfo("404 Not Found, Path: %s", c.Path())
 		return c.SendStatus(http.StatusNotFound)
 	})
 
 	err := r.Listen(addr)
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Printf("Error during ListenAndServe: %v\n", err)
-		log.Printf("HTTP server failed to start on addr '%s'\n", addr)
+		logError("Error during ListenAndServe: %v\n", err)
+		logError("HTTP server failed to start on addr '%s'\n", addr)
 		return err
 	}
 	log.Println("HTTP server stopped")
@@ -100,10 +101,10 @@ func httpInfoRefs(baseRepoDir string) fiber.Handler {
 
 		ep, err := transport.NewEndpoint("/")
 		if err != nil {
-			log.Printf("Error creating endpoint: %v, repo: %s\n", err, repoName)
+			logError("Error creating endpoint: %v, repo: %s\n", err, repoName)
 			_, errResp := c.WriteString(err.Error())
 			if errResp != nil {
-				log.Printf("WriteString error: %v\n", errResp)
+				logError("WriteString error: %v\n", errResp)
 			}
 			return c.SendStatus(http.StatusInternalServerError)
 		}
@@ -113,10 +114,10 @@ func httpInfoRefs(baseRepoDir string) fiber.Handler {
 		svr := server.NewServer(ld)
 		sess, err := svr.NewUploadPackSession(ep, nil)
 		if err != nil {
-			log.Printf("Error creating upload pack session: %v, repo: %s\n", err, repoName)
+			logError("Error creating upload pack session: %v, repo: %s\n", err, repoName)
 			_, errResp := c.WriteString(err.Error())
 			if errResp != nil {
-				log.Printf("WriteString error: %v\n", errResp)
+				logError("WriteString error: %v\n", errResp)
 			}
 			return c.SendStatus(http.StatusInternalServerError)
 		}
@@ -125,9 +126,9 @@ func httpInfoRefs(baseRepoDir string) fiber.Handler {
 		if err != nil {
 			_, errResp := c.WriteString(err.Error())
 			if errResp != nil {
-				log.Printf("WriteString error: %v\n", errResp)
+				logError("WriteString error: %v\n", errResp)
 			}
-			log.Printf("Error getting advertised references: %v, repo: %s\n", err, repoName)
+			logError("Error getting advertised references: %v, repo: %s\n", err, repoName)
 			return c.SendStatus(http.StatusInternalServerError)
 		}
 
@@ -137,10 +138,10 @@ func httpInfoRefs(baseRepoDir string) fiber.Handler {
 		}
 		err = ar.Encode(c)
 		if err != nil {
-			log.Printf("Error encoding advertised references: %v, repo: %s\n", err, repoName)
+			logError("Error encoding advertised references: %v, repo: %s\n", err, repoName)
 			_, errResp := c.WriteString(err.Error())
 			if errResp != nil {
-				log.Printf("WriteString error: %v\n", errResp)
+				logError("WriteString error: %v\n", errResp)
 			}
 			return c.SendStatus(http.StatusInternalServerError)
 		}
@@ -171,10 +172,10 @@ func httpGitUploadPack(baseRepoDir string) fiber.Handler {
 		if c.Get("Content-Encoding") == "gzip" {
 			gzipReader, err := gzip.NewReader(bytes.NewReader(bodyBytes))
 			if err != nil {
-				log.Printf("Error creating gzip reader: %v, repo: %s\n", err, repoName)
+				logError("Error creating gzip reader: %v, repo: %s\n", err, repoName)
 				_, errResp := c.WriteString(err.Error())
 				if errResp != nil {
-					log.Printf("WriteString error: %v\n", errResp)
+					logError("WriteString error: %v\n", errResp)
 				}
 				return c.SendStatus(http.StatusInternalServerError)
 			}
@@ -185,20 +186,20 @@ func httpGitUploadPack(baseRepoDir string) fiber.Handler {
 		upr := packp.NewUploadPackRequest()
 		err := upr.Decode(bodyReader)
 		if err != nil {
-			log.Printf("Error decoding upload pack request: %v, repo: %s\n", err, repoName)
+			logError("Error decoding upload pack request: %v, repo: %s\n", err, repoName)
 			_, errResp := c.WriteString(err.Error())
 			if errResp != nil {
-				log.Printf("WriteString error: %v\n", errResp)
+				logError("WriteString error: %v\n", errResp)
 			}
 			return c.SendStatus(http.StatusInternalServerError)
 		}
 
 		ep, err := transport.NewEndpoint("/")
 		if err != nil {
-			log.Printf("Error creating endpoint: %v, repo: %s\n", err, repoName)
+			logError("Error creating endpoint: %v, repo: %s\n", err, repoName)
 			_, errResp := c.WriteString(err.Error())
 			if errResp != nil {
-				log.Printf("WriteString error: %v\n", errResp)
+				logError("WriteString error: %v\n", errResp)
 			}
 			return c.SendStatus(http.StatusInternalServerError)
 		}
@@ -208,10 +209,10 @@ func httpGitUploadPack(baseRepoDir string) fiber.Handler {
 		svr := server.NewServer(ld)
 		sess, err := svr.NewUploadPackSession(ep, nil)
 		if err != nil {
-			log.Printf("Error creating upload pack session: %v, repo: %s\n", err, repoName)
+			logError("Error creating upload pack session: %v, repo: %s\n", err, repoName)
 			_, errResp := c.WriteString(err.Error())
 			if errResp != nil {
-				log.Printf("WriteString error: %v\n", errResp)
+				logError("WriteString error: %v\n", errResp)
 			}
 			return c.SendStatus(http.StatusInternalServerError)
 		}
@@ -220,18 +221,18 @@ func httpGitUploadPack(baseRepoDir string) fiber.Handler {
 		if err != nil {
 			_, errResp := c.WriteString(err.Error())
 			if errResp != nil {
-				log.Printf("WriteString error: %v\n", errResp)
+				logError("WriteString error: %v\n", errResp)
 			}
-			log.Printf("Error during upload pack: %v, repo: %s\n", err, repoName)
+			logError("Error during upload pack: %v, repo: %s\n", err, repoName)
 			return c.SendStatus(http.StatusInternalServerError)
 		}
 
 		err = res.Encode(c)
 		if err != nil {
-			log.Printf("Error encoding upload pack result: %v, repo: %s\n", err, repoName)
+			logError("Error encoding upload pack result: %v, repo: %s\n", err, repoName)
 			_, errResp := c.WriteString(err.Error())
 			if errResp != nil {
-				log.Printf("WriteString error: %v\n", errResp)
+				logError("WriteString error: %v\n", errResp)
 			}
 			return c.SendStatus(http.StatusInternalServerError)
 		}

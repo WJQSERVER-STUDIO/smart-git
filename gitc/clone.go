@@ -34,10 +34,10 @@ func CloneRepo(dir string, userName string, repoName string, repoUrl string, cfg
 		_, err = git.PlainOpen(repoPath)
 		if err != nil {
 			// 目录存在，但不是一个有效的 git 仓库
-			fmt.Printf("目录 '%s' 存在，但不是一个有效的 git 仓库。移除并重新克隆。\n", repoPath)
+			logError("目录 '%s' 存在，但不是一个有效的 git 仓库。移除并重新克隆。\n", repoPath)
 			err = os.RemoveAll(repoPath)
 			if err != nil {
-				fmt.Printf("移除无效仓库目录失败: %v\n", err)
+				logError("移除无效仓库目录失败: %v\n", err)
 				return
 			}
 			// 继续克隆
