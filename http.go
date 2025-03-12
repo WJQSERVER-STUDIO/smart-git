@@ -74,24 +74,6 @@ func RunHTTP(addr string, baseRepoDir string) error {
 	return nil
 }
 
-// sanitizeInput 函数用于清理输入字符串，防止路径遍历攻击。
-//
-// 参数:
-//   - input: 需要清理的输入字符串。
-//
-// 返回值:
-//   - string: 清理后的字符串。
-func sanitizeInput(input string) string {
-	// 仅允许字母、数字、下划线和短横线
-	var sanitized []rune
-	for _, r := range input {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
-			sanitized = append(sanitized, r)
-		}
-	}
-	return string(sanitized)
-}
-
 // httpInfoRefs 函数处理 /info/refs 请求，用于服务发现和获取仓库引用信息。
 //
 // 该函数响应 Git 客户端的 info/refs 请求，用于客户端发现服务并获取仓库的引用信息（例如分支和标签）。
@@ -104,17 +86,10 @@ func sanitizeInput(input string) string {
 //   - fiber.Handler: Fiber 路由处理函数。
 func httpInfoRefs(baseRepoDir string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		repoName := sanitizeInput(c.Params("repo"))
-		if repoName == "" {
-			logError("repoName is empty")
-			return fmt.Errorf("repoName is empty")
-		}
 
-		userName := sanitizeInput(c.Params("user"))
-		if userName == "" {
-			logError("userName is empty")
-			return fmt.Errorf("userName is empty")
-		}
+		repoName := c.Params("repo")
+		userName := c.Params("user")
+
 		dir := baseRepoDir + "/" + userName + "/" + repoName
 
 		// 增加统计次数
