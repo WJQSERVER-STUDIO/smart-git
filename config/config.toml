@@ -6,3 +6,10 @@ baseDir = "/data/smart-git/repos"
 [log]
 logfilepath = "/data/smart-git/smart-git.log" 
 maxlogsize = 5 # MB
+
+[Database]
+path = "/data/smart-git/db/smart-git.db"
+
+[cache]
+expire = "1h"
+expireEx = "10m"

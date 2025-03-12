@@ -9,7 +9,8 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
+	"smart-git/database"
+	"smart-git/gitc"
 	"smart-git/middleware/loggin"
 	"smart-git/middleware/timing"
 
@@ -38,6 +39,22 @@ func RunHTTP(addr string, baseRepoDir string) error {
 
 	r.Get("/:user/:repo/info/refs", httpInfoRefs(baseRepoDir))             // 处理仓库引用信息请求
 	r.Post("/:user/:repo/git-upload-pack", httpGitUploadPack(baseRepoDir)) // 处理 git-upload-pack 请求
+
+	// debug触发器
+	r.Get("/debug/all", func(c *fiber.Ctx) error {
+		allData, err := database.DB.GetAllData()
+		if err != nil {
+			return err
+		}
+		return c.JSON(allData)
+	})
+	r.Get("/debug/sum", func(c *fiber.Ctx) error {
+		allData, err := database.DB.GetAllSumData()
+		if err != nil {
+			return err
+		}
+		return c.JSON(allData)
+	})
 
 	// 404 路由处理
 	r.Use(func(c *fiber.Ctx) error {
@@ -70,14 +87,14 @@ func httpInfoRefs(baseRepoDir string) fiber.Handler {
 		userName := c.Params("user")
 		dir := baseRepoDir + "/" + userName + "/" + repoName
 
-		_, err := os.Stat(dir)
-		if errors.Is(err, os.ErrNotExist) {
-			// 如果仓库目录不存在，则尝试克隆仓库 (CloneRepo 函数需自行实现)
-			CloneRepo(dir, repoName, "https://github.com/"+userName+"/"+repoName)
-		} else if err != nil {
-			log.Printf("CloneRepo error: %v, repo: %s\n", err, repoName)
-			return c.SendStatus(http.StatusInternalServerError)
+		// 增加统计次数
+		err := AddRequestCount(userName, repoName)
+		if err != nil {
+			logError("增加请求次数失败: %v\n", err)
+			return err
 		}
+
+		gitc.CloneRepo(dir, userName, repoName, "https://github.com/"+userName+"/"+repoName, cfg)
 
 		c.Set("Content-Type", "application/x-git-upload-pack-advertisement")
 

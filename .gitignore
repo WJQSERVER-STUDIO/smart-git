@@ -2,3 +2,4 @@ gitrepo
 repos
 *.log
 demo.toml
+*.db

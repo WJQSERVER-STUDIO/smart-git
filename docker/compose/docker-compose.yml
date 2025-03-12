@@ -7,5 +7,6 @@ services:
             - './smart-git/log/run:/data/smart-git/log'
             - './smart-git/config:/data/smart-git/config'
             - './smart-git/repos:/data/smart-git/repos'
+            - './smart-git/db:/data/smart-git/db'
         ports:
             - '8080:8080'

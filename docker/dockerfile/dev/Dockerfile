@@ -11,6 +11,7 @@ ARG TARGETPLATFORM
 RUN mkdir -p /data/${APPLICATION}/repos
 RUN mkdir -p /data/${APPLICATION}/config 
 RUN mkdir -p /data/${APPLICATION}/log 
+RUN mkdir -p /data/${APPLICATION}/db
 
 # 安装依赖
 RUN apk add --no-cache curl wget tar

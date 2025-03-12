@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"smart-git/config"
+	"smart-git/database"
 
 	"github.com/WJQSERVER-STUDIO/go-utils/logger"
 )
@@ -57,6 +58,8 @@ func init() {
 		fmt.Printf("Fail to init logger: %v\n", err)
 		return
 	}
+
+	database.SetDBInfo(cfg)
 
 }
 
