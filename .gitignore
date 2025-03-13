@@ -3,3 +3,4 @@ repos
 *.log
 demo.toml
 *.db
+h2ctest
