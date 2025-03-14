@@ -58,6 +58,9 @@ func init() {
 		fmt.Printf("Fail to init logger: %v\n", err)
 		return
 	}
+	if cfg.Log.Level != "" {
+		logger.SetLogLevel(cfg.Log.Level)
+	}
 
 	database.SetDBInfo(cfg)
 }

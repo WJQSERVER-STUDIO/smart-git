@@ -23,6 +23,7 @@ type ServerConfig struct {
 type LogConfig struct {
 	LogFilePath string `toml:"logfilepath"`
 	MaxLogSize  int    `toml:"maxlogsize"`
+	Level       string `toml:"level"`
 }
 
 type DatabaseConfig struct {
