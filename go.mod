@@ -9,7 +9,6 @@ require (
 	github.com/go-git/go-git/v5 v5.14.0
 	github.com/hertz-contrib/gzip v0.0.3
 	github.com/hertz-contrib/http2 v0.1.8
-	github.com/hertz-contrib/logger/accesslog v0.0.0-20241107070745-e4ce8c54dd97
 )
 
 require (
