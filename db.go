@@ -32,7 +32,7 @@ func AddCloneCount(repoUser string, repoName string) error {
 		logError("Fail to get repo sum data: %v\n", err)
 		return err
 	}
-	if isExist == false {
+	if !isExist {
 		repoSumData = &schema.RepoSumData{
 			RepoUser:     repoUser,
 			RepoName:     repoName,
@@ -56,7 +56,7 @@ func AddRequestCount(repoUser string, repoName string) error {
 		logError("Fail to get repo sum data: %v\n", err)
 		return err
 	}
-	if isExist == false {
+	if !isExist {
 		repoSumData = &schema.RepoSumData{
 			RepoUser:     repoUser,
 			RepoName:     repoName,

@@ -83,14 +83,6 @@ func RunHTTP(addr string, baseRepoDir string) error {
 		c.Status(http.StatusNotFound)                        // 发送 404 状态码
 	})
 
-	/*
-		err := r.Run(addr) // 启动 Hertz 服务器
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logError("Error during ListenAndServe: %v\n", err)
-			logError("HTTP server failed to start on addr '%s'\n", addr)
-			return err
-		}
-	*/
 	r.Spin()
 	log.Println("HTTP server stopped")
 	return nil
@@ -131,6 +123,13 @@ func httpInfoRefs(ctx context.Context, c *app.RequestContext, baseRepoDir string
 	} else if err == plumbing.ErrReferenceNotFound {
 		logError("Repo not found: %v\n", err)
 		c.Status(http.StatusNotFound) // 发送 404 状态码
+		return
+	}
+
+	if c.Query("service") != "git-upload-pack" {
+		logInfo("Full URI: %s", c.Request.URI().String())
+		c.String(http.StatusForbidden, "Invalid service, Only Smart HTTP")
+		logError("Invalid service, Only Smart HTTP")
 		return
 	}
 
@@ -216,6 +215,7 @@ func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir s
 
 	bodyBytes := c.Request.Body() // 使用 rc.Request.Body() 获取请求体
 	var bodyReader io.Reader = bytes.NewReader(bodyBytes)
+	logDump("Compress: %s", string(c.GetHeader("Content-Encoding")))
 	if string(c.GetHeader("Content-Encoding")) == "gzip" { // 使用 rc.GetHeader 获取 Header
 		gzipReader, err := gzip.NewReader(bytes.NewReader(bodyBytes))
 		if err != nil {
@@ -235,6 +235,12 @@ func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir s
 	upr := packp.NewUploadPackRequest()
 	err := upr.Decode(bodyReader)
 	if err != nil {
+		// 尝试读取并记录请求体的前几行，以便诊断问题
+		bodyBuffer := new(bytes.Buffer)
+		tee := io.TeeReader(bytes.NewReader(bodyBytes), bodyBuffer)
+		firstLine := make([]byte, 200) // 读取前 200 字节
+		n, _ := tee.Read(firstLine)
+		logError("First part of upload pack request body: %s\n", string(firstLine[:n]))
 		logError("Error decoding upload pack request: %v, repo: %s\n", err, repoName)
 		c.Error(err) // 使用 Hertz 的 Error Handling
 		_, errResp := c.WriteString(err.Error())

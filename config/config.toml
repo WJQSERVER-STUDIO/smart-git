@@ -6,6 +6,7 @@ baseDir = "/data/smart-git/repos"
 [log]
 logfilepath = "/data/smart-git/log/smart-git.log" 
 maxlogsize = 5 # MB
+level = "info" # dump, debug, info, warn, error, none
 
 [Database]
 path = "/data/smart-git/db/smart-git.db"

@@ -23,6 +23,7 @@ baseDir = "/data/smart-git/repos" # 缓存文件夹
 [log]
 logfilepath = "/data/smart-git/log/smart-git.log"  # 日志存储位置
 maxlogsize = 5 # MB
+level = "info" # dump, debug, info, warn, error, none
 
 [Database]
 path = "/data/smart-git/db/smart-git.db" # 数据库存储位置
