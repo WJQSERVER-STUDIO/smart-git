@@ -23,6 +23,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	gitserver "github.com/go-git/go-git/v5/plumbing/transport/server"
 
+	hresp "github.com/cloudwego/hertz/pkg/protocol/http1/resp"
 	rgzip "github.com/hertz-contrib/gzip"
 	"github.com/hertz-contrib/http2/factory"
 )
@@ -98,6 +99,8 @@ func RunHTTP(addr string, baseRepoDir string) error {
 //
 // 返回值:
 func httpInfoRefs(ctx context.Context, c *app.RequestContext, baseRepoDir string) {
+
+	c.Response.HijackWriter(hresp.NewChunkedBodyWriter(&c.Response, c.GetWriter()))
 
 	repoName := c.Param("repo") // 使用 rc.Param 获取路由参数
 	userName := c.Param("user") // 使用 rc.Param 获取路由参数
@@ -177,7 +180,7 @@ func httpInfoRefs(ctx context.Context, c *app.RequestContext, baseRepoDir string
 		[]byte("# service=git-upload-pack"),
 		pktline.Flush,
 	}
-	err = ar.Encode(c) // 使用 rc 作为 io.Writer
+	err = ar.Encode(c.Response.BodyWriter())
 	if err != nil {
 		logError("Error encoding advertised references: %v, repo: %s\n", err, repoName)
 		_, errResp := c.WriteString(err.Error())
@@ -201,6 +204,9 @@ func httpInfoRefs(ctx context.Context, c *app.RequestContext, baseRepoDir string
 // 返回值:
 //   - app.Handler: Hertz 路由处理函数。
 func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir string) { // 使用 Hertz 的 Context 和 RequestContext
+
+	c.Response.HijackWriter(hresp.NewChunkedBodyWriter(&c.Response, c.GetWriter()))
+
 	repoName := c.Param("repo") // 使用 rc.Param 获取路由参数
 	if repoName == "" {
 		logError("repoName is empty")
@@ -289,7 +295,7 @@ func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir s
 		return
 	}
 
-	err = res.Encode(c) // 使用 c 作为 io.Writer
+	err = res.Encode(c.Response.BodyWriter()) // 使用 c.Response.BodyWriter() 作为 io.Writer
 	if err != nil {
 		logError("Error encoding upload pack result: %v, repo: %s\n", err, repoName)
 		_, errResp := c.WriteString(err.Error())
