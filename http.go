@@ -37,7 +37,7 @@ import (
 // 返回值:
 //   - error: 如果服务器启动失败，则返回错误信息。
 func RunHTTP(addr string, baseRepoDir string) error {
-	logError("Starting HTTP server on addr '%s'\n", addr)
+	logInfo("Starting HTTP server on addr '%s'\n", addr)
 
 	r := server.New(
 		server.WithHostPorts(addr),
@@ -99,8 +99,6 @@ func RunHTTP(addr string, baseRepoDir string) error {
 //
 // 返回值:
 func httpInfoRefs(ctx context.Context, c *app.RequestContext, baseRepoDir string) {
-
-	c.Response.HijackWriter(hresp.NewChunkedBodyWriter(&c.Response, c.GetWriter()))
 
 	repoName := c.Param("repo") // 使用 rc.Param 获取路由参数
 	userName := c.Param("user") // 使用 rc.Param 获取路由参数
@@ -176,11 +174,15 @@ func httpInfoRefs(ctx context.Context, c *app.RequestContext, baseRepoDir string
 		return
 	}
 
+	c.Response.HijackWriter(hresp.NewChunkedBodyWriter(&c.Response, c.GetWriter()))
+
 	ar.Prefix = [][]byte{
 		[]byte("# service=git-upload-pack"),
 		pktline.Flush,
 	}
-	err = ar.Encode(c.Response.BodyWriter())
+	writer := c.Response.BodyWriter()
+
+	err = ar.Encode(writer)
 	if err != nil {
 		logError("Error encoding advertised references: %v, repo: %s\n", err, repoName)
 		_, errResp := c.WriteString(err.Error())
@@ -204,8 +206,6 @@ func httpInfoRefs(ctx context.Context, c *app.RequestContext, baseRepoDir string
 // 返回值:
 //   - app.Handler: Hertz 路由处理函数。
 func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir string) { // 使用 Hertz 的 Context 和 RequestContext
-
-	c.Response.HijackWriter(hresp.NewChunkedBodyWriter(&c.Response, c.GetWriter()))
 
 	repoName := c.Param("repo") // 使用 rc.Param 获取路由参数
 	if repoName == "" {
@@ -295,7 +295,11 @@ func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir s
 		return
 	}
 
-	err = res.Encode(c.Response.BodyWriter()) // 使用 c.Response.BodyWriter() 作为 io.Writer
+	c.Response.HijackWriter(hresp.NewChunkedBodyWriter(&c.Response, c.GetWriter()))
+
+	writer := c.Response.BodyWriter()
+
+	err = res.Encode(writer) // 使用 c.Response.BodyWriter() 作为 io.Writer
 	if err != nil {
 		logError("Error encoding upload pack result: %v, repo: %s\n", err, repoName)
 		_, errResp := c.WriteString(err.Error())
