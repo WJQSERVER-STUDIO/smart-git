@@ -23,7 +23,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	gitserver "github.com/go-git/go-git/v5/plumbing/transport/server"
 
-	hresp "github.com/cloudwego/hertz/pkg/protocol/http1/resp"
+	//hresp "github.com/cloudwego/hertz/pkg/protocol/http1/resp"
 	rgzip "github.com/hertz-contrib/gzip"
 	"github.com/hertz-contrib/http2/factory"
 )
@@ -174,7 +174,7 @@ func httpInfoRefs(ctx context.Context, c *app.RequestContext, baseRepoDir string
 		return
 	}
 
-	c.Response.HijackWriter(hresp.NewChunkedBodyWriter(&c.Response, c.GetWriter()))
+	//c.Response.HijackWriter(hresp.NewChunkedBodyWriter(&c.Response, c.GetWriter()))
 
 	ar.Prefix = [][]byte{
 		[]byte("# service=git-upload-pack"),
@@ -192,7 +192,6 @@ func httpInfoRefs(ctx context.Context, c *app.RequestContext, baseRepoDir string
 		c.Status(http.StatusInternalServerError)
 		return
 	}
-	return
 }
 
 // httpGitUploadPack 函数处理 /git-upload-pack 请求，允许客户端推送代码到服务器。
@@ -221,12 +220,12 @@ func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir s
 
 	bodyBytes := c.Request.Body() // 使用 rc.Request.Body() 获取请求体
 	var bodyReader io.Reader = bytes.NewReader(bodyBytes)
-	logDump("Compress: %s", string(c.GetHeader("Content-Encoding")))
-	if string(c.GetHeader("Content-Encoding")) == "gzip" { // 使用 rc.GetHeader 获取 Header
+
+	if string(c.GetHeader("Content-Encoding")) == "gzip" {
 		gzipReader, err := gzip.NewReader(bytes.NewReader(bodyBytes))
 		if err != nil {
 			logError("Error creating gzip reader: %v, repo: %s\n", err, repoName)
-			c.Error(err) // 使用 Hertz 的 Error Handling
+			c.Error(err)
 			_, errResp := c.WriteString(err.Error())
 			if errResp != nil {
 				logError("WriteString error: %v\n", errResp)
@@ -295,7 +294,7 @@ func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir s
 		return
 	}
 
-	c.Response.HijackWriter(hresp.NewChunkedBodyWriter(&c.Response, c.GetWriter()))
+	//c.Response.HijackWriter(hresp.NewChunkedBodyWriter(&c.Response, c.GetWriter()))
 
 	writer := c.Response.BodyWriter()
 
@@ -309,6 +308,4 @@ func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir s
 		c.Status(http.StatusInternalServerError)
 		return
 	}
-
-	return
 }
