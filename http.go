@@ -180,18 +180,38 @@ func httpInfoRefs(ctx context.Context, c *app.RequestContext, baseRepoDir string
 		[]byte("# service=git-upload-pack"),
 		pktline.Flush,
 	}
-	writer := c.Response.BodyWriter()
+	//writer := c.Response.BodyWriter()
 
-	err = ar.Encode(writer)
-	if err != nil {
-		logError("Error encoding advertised references: %v, repo: %s\n", err, repoName)
-		_, errResp := c.WriteString(err.Error())
-		if errResp != nil {
-			logError("WriteString error: %v\n", errResp)
+	pr, pw := io.Pipe()
+	go func() {
+		defer pw.Close()
+		err = ar.Encode(pw)
+		if err != nil {
+			logError("Error encoding advertised references: %v, repo: %s\n", err, repoName)
+			_, errResp := c.WriteString(err.Error())
+			if errResp != nil {
+				logError("WriteString error: %v\n", errResp)
+			}
+			c.Status(http.StatusInternalServerError)
+			return
 		}
-		c.Status(http.StatusInternalServerError)
-		return
-	}
+	}()
+
+	c.SetBodyStream(pr, -1)
+
+	/*
+
+		err = ar.Encode(writer)
+		if err != nil {
+			logError("Error encoding advertised references: %v, repo: %s\n", err, repoName)
+			_, errResp := c.WriteString(err.Error())
+			if errResp != nil {
+				logError("WriteString error: %v\n", errResp)
+			}
+			c.Status(http.StatusInternalServerError)
+			return
+		}
+	*/
 }
 
 // httpGitUploadPack 函数处理 /git-upload-pack 请求，允许客户端推送代码到服务器。
@@ -296,16 +316,38 @@ func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir s
 
 	//c.Response.HijackWriter(hresp.NewChunkedBodyWriter(&c.Response, c.GetWriter()))
 
-	writer := c.Response.BodyWriter()
+	//writer := c.Response.BodyWriter()
 
-	err = res.Encode(writer) // 使用 c.Response.BodyWriter() 作为 io.Writer
-	if err != nil {
-		logError("Error encoding upload pack result: %v, repo: %s\n", err, repoName)
-		_, errResp := c.WriteString(err.Error())
-		if errResp != nil {
-			logError("WriteString error: %v\n", errResp)
+	pr, pw := io.Pipe()
+
+	go func() {
+		defer pw.Close()
+		err = res.Encode(pw)
+		if err != nil {
+			logError("Error encoding upload pack result: %v, repo: %s\n", err, repoName)
+			_, errResp := c.WriteString(err.Error())
+			if errResp != nil {
+				logError("WriteString error: %v\n", errResp)
+			}
+			c.Status(http.StatusInternalServerError)
+			return
 		}
-		c.Status(http.StatusInternalServerError)
-		return
-	}
+
+	}()
+
+	c.SetBodyStream(pr, -1)
+
+	/*
+	   err = res.Encode(writer) // 使用 c.Response.BodyWriter() 作为 io.Writer
+
+	   	if err != nil {
+	   		logError("Error encoding upload pack result: %v, repo: %s\n", err, repoName)
+	   		_, errResp := c.WriteString(err.Error())
+	   		if errResp != nil {
+	   			logError("WriteString error: %v\n", errResp)
+	   		}
+	   		c.Status(http.StatusInternalServerError)
+	   		return
+	   	}
+	*/
 }
