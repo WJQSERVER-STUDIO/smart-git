@@ -69,8 +69,10 @@ func main() {
 
 	defer database.DB.Close()
 
+	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
+
 	// 运行HTTP Git Server
-	err := RunHTTP(":8080", cfg.Server.BaseDir)
+	err := RunHTTP(addr, cfg.Server.BaseDir)
 	if err != nil {
 		fmt.Printf("Fail to run http: %v\n", err)
 		return
