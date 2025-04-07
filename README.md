@@ -19,6 +19,7 @@ Docker Compose 安装 [docker-compose.yml](https://github.com/WJQSERVER-STUDIO/s
 host = "0.0.0.0" # 监听地址
 port = 8080  # 监听端口
 baseDir = "/data/smart-git/repos" # 缓存文件夹
+memLimit = 0 #MB 内存使用限制
 
 [log]
 logfilepath = "/data/smart-git/log/smart-git.log"  # 日志存储位置

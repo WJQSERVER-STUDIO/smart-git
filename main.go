@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime/debug"
 	"smart-git/config"
 	"smart-git/database"
 
@@ -41,10 +42,18 @@ func loadConfig() {
 	fmt.Printf("Loaded config: %v\n", cfg)
 }
 
+func setMemLimit(cfg *config.Config) {
+	if cfg.Server.MemLimit > 0 {
+		debug.SetMemoryLimit((cfg.Server.MemLimit) * 1024 * 1024)
+		logInfo("Set Memory Limit to %d MB", cfg.Server.MemLimit)
+	}
+}
+
 // init
 func init() {
 	ReadFlag()
 	loadConfig()
+	setMemLimit(cfg)
 
 	// 创建根目录 os
 	err := os.MkdirAll(cfg.Server.BaseDir, 0755)
