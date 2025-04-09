@@ -25,8 +25,8 @@ github.com/bytedance/mockey v1.2.12 h1:aeszOmGw8CPX8CRx1DZ/Glzb1yXvhjDh6jdFBNZjs
 github.com/bytedance/mockey v1.2.12/go.mod h1:3ZA4MQasmqC87Tw0w7Ygdy7eHIc2xgpZ8Pona5rsYIk=
 github.com/bytedance/sonic v1.5.0/go.mod h1:ED5hyg4y6t3/9Ku1R6dU/4KyJ48DZ4jPhfY1O2AihPM=
 github.com/bytedance/sonic v1.8.1/go.mod h1:i736AoUSYt75HyZLoJW9ERYxcy6eaN6h4BZXU064P/U=
-github.com/bytedance/sonic v1.13.1 h1:Jyd5CIvdFnkOWuKXr+wm4Nyk2h0yAFsr8ucJgEasO3g=
-github.com/bytedance/sonic v1.13.1/go.mod h1:o68xyaF9u2gvVBuGHPlUVCy+ZfmNNO5ETf1+KgkJhz4=
+github.com/bytedance/sonic v1.13.2 h1:8/H1FempDZqC4VqjptGo14QQlJx8VdZJegxs6wwfqpQ=
+github.com/bytedance/sonic v1.13.2/go.mod h1:o68xyaF9u2gvVBuGHPlUVCy+ZfmNNO5ETf1+KgkJhz4=
 github.com/bytedance/sonic/loader v0.1.1/go.mod h1:ncP89zfokxS5LZrJxl5z0UJcsk4M4yY2JpfqGeCtNLU=
 github.com/bytedance/sonic/loader v0.2.4 h1:ZWCw4stuXUsn1/+zQDqeE7JKP+QO47tz7QCNan80NzY=
 github.com/bytedance/sonic/loader v0.2.4/go.mod h1:N8A3vUdtUebEY2/VQC0MyhYeKUFosQU6FxH2JmUe6VI=
@@ -37,8 +37,8 @@ github.com/cloudflare/circl v1.6.0/go.mod h1:uddAzsPgqdMAYatqJ0lsjX1oECcQLIlRpzZ
 github.com/cloudwego/base64x v0.1.5 h1:XPciSp1xaq2VCSt6lF0phncD4koWyULpl5bUxbfCyP4=
 github.com/cloudwego/base64x v0.1.5/go.mod h1:0zlkT4Wn5C6NdauXdJRhSKRlJvmclQ1hhJgA0rcu/8w=
 github.com/cloudwego/hertz v0.6.8/go.mod h1:KhztQcZtMQ46gOjZcmCy557AKD29cbumGEV0BzwevwA=
-github.com/cloudwego/hertz v0.9.6 h1:Kj5SSPlKBC32NIN7+B/tt8O1pdDz8brMai00rqqjULQ=
-github.com/cloudwego/hertz v0.9.6/go.mod h1:X5Ez52XhtszU4t+CTBGIJI4PqmcI1oSf8ULBz0SWfLo=
+github.com/cloudwego/hertz v0.9.7 h1:tAVaiO+vTf+ZkQhvNhKbDJ0hmC4oJ7bzwDi1KhvhHy4=
+github.com/cloudwego/hertz v0.9.7/go.mod h1:t6d7NcoQxPmETvzPMMIVPHMn5C5QzpqIiFsaavoLJYQ=
 github.com/cloudwego/iasm v0.2.0/go.mod h1:8rXZaNYT2n95jn+zTI1sDr+IgcD2GVs0nlbbQPiEFhY=
 github.com/cloudwego/netpoll v0.3.2/go.mod h1:xVefXptcyheopwNDZjDPcfU6kIjZXZ4nY550k1yH9eQ=
 github.com/cloudwego/netpoll v0.6.5 h1:6E/BWhSzQoyLg9Kx/4xiMdIIpovzwBtXvuqSqaTUzDQ=
