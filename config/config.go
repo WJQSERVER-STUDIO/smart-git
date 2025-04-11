@@ -15,9 +15,10 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Host    string `toml:"host"`
-	Port    int    `toml:"port"`
-	BaseDir string `toml:"baseDir"`
+	Host     string `toml:"host"`
+	Port     int    `toml:"port"`
+	BaseDir  string `toml:"baseDir"`
+	MemLimit int64  `toml:"memLimit"`
 }
 
 type LogConfig struct {
