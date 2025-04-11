@@ -16,6 +16,8 @@ import (
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/server"
+
+	//"github.com/cloudwego/hertz/pkg/network/standard"
 	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/format/pktline"
@@ -23,7 +25,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	gitserver "github.com/go-git/go-git/v5/plumbing/transport/server"
 
-	//hresp "github.com/cloudwego/hertz/pkg/protocol/http1/resp"
 	rgzip "github.com/hertz-contrib/gzip"
 	"github.com/hertz-contrib/http2/factory"
 )
@@ -42,6 +43,8 @@ func RunHTTP(addr string, baseRepoDir string) error {
 	r := server.New(
 		server.WithHostPorts(addr),
 		server.WithH2C(true),
+		//server.WithALPN(true),
+		//server.WithTransport(standard.NewTransporter),
 	)
 
 	r.AddProtocol("h2", factory.NewServerFactory())
@@ -174,13 +177,10 @@ func httpInfoRefs(ctx context.Context, c *app.RequestContext, baseRepoDir string
 		return
 	}
 
-	//c.Response.HijackWriter(hresp.NewChunkedBodyWriter(&c.Response, c.GetWriter()))
-
 	ar.Prefix = [][]byte{
 		[]byte("# service=git-upload-pack"),
 		pktline.Flush,
 	}
-	//writer := c.Response.BodyWriter()
 
 	pr, pw := io.Pipe()
 	go func() {
@@ -198,20 +198,6 @@ func httpInfoRefs(ctx context.Context, c *app.RequestContext, baseRepoDir string
 	}()
 
 	c.SetBodyStream(pr, -1)
-
-	/*
-
-		err = ar.Encode(writer)
-		if err != nil {
-			logError("Error encoding advertised references: %v, repo: %s\n", err, repoName)
-			_, errResp := c.WriteString(err.Error())
-			if errResp != nil {
-				logError("WriteString error: %v\n", errResp)
-			}
-			c.Status(http.StatusInternalServerError)
-			return
-		}
-	*/
 }
 
 // httpGitUploadPack 函数处理 /git-upload-pack 请求，允许客户端推送代码到服务器。
@@ -314,10 +300,6 @@ func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir s
 		return
 	}
 
-	//c.Response.HijackWriter(hresp.NewChunkedBodyWriter(&c.Response, c.GetWriter()))
-
-	//writer := c.Response.BodyWriter()
-
 	pr, pw := io.Pipe()
 
 	go func() {
@@ -336,18 +318,4 @@ func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir s
 	}()
 
 	c.SetBodyStream(pr, -1)
-
-	/*
-	   err = res.Encode(writer) // 使用 c.Response.BodyWriter() 作为 io.Writer
-
-	   	if err != nil {
-	   		logError("Error encoding upload pack result: %v, repo: %s\n", err, repoName)
-	   		_, errResp := c.WriteString(err.Error())
-	   		if errResp != nil {
-	   			logError("WriteString error: %v\n", errResp)
-	   		}
-	   		c.Status(http.StatusInternalServerError)
-	   		return
-	   	}
-	*/
 }
