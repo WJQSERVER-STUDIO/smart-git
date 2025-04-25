@@ -6,7 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/cloudwego/hertz v0.9.7
 	github.com/go-git/go-billy/v5 v5.6.2
-	github.com/go-git/go-git/v5 v5.15.0
+	github.com/go-git/go-git/v5 v5.16.0
 	github.com/hertz-contrib/gzip v0.0.3
 	github.com/hertz-contrib/http2 v0.1.8
 )
@@ -21,7 +21,7 @@ require (
 	github.com/cloudwego/netpoll v0.7.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
-	github.com/nyaruka/phonenumbers v1.6.0 // indirect
+	github.com/nyaruka/phonenumbers v1.6.1 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
