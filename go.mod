@@ -12,7 +12,6 @@ require (
 )
 
 require (
-	github.com/WJQSERVER-STUDIO/go-utils/log v0.0.1 // indirect
 	github.com/bytedance/gopkg v0.1.2 // indirect
 	github.com/bytedance/sonic v1.13.2 // indirect
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
@@ -36,7 +35,7 @@ require (
 	dario.cat/mergo v1.0.1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.2.0 // indirect
-	github.com/WJQSERVER-STUDIO/go-utils/logger v1.5.0
+	github.com/WJQSERVER-STUDIO/go-utils/logger v1.6.0
 	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/cyphar/filepath-securejoin v0.4.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
