@@ -8,7 +8,7 @@ import (
 
 	"smart-git/config"
 
-	"github.com/WJQSERVER-STUDIO/go-utils/logger"
+	"github.com/WJQSERVER-STUDIO/logger"
 	"github.com/go-git/go-git/v5"
 	gconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"

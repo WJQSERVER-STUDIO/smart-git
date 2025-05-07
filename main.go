@@ -9,7 +9,7 @@ import (
 	"smart-git/config"
 	"smart-git/database"
 
-	"github.com/WJQSERVER-STUDIO/go-utils/logger"
+	"github.com/WJQSERVER-STUDIO/logger"
 )
 
 var (

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"smart-git/database/schema"
 
-	"github.com/WJQSERVER-STUDIO/go-utils/logger"
+	"github.com/WJQSERVER-STUDIO/logger"
 	"go.etcd.io/bbolt"
 )
 
