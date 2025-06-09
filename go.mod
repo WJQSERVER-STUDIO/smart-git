@@ -7,7 +7,7 @@ require (
 	github.com/WJQSERVER-STUDIO/logger v1.6.0
 	github.com/cloudwego/hertz v0.9.7
 	github.com/go-git/go-billy/v5 v5.6.2
-	github.com/go-git/go-git/v5 v5.16.0
+	github.com/go-git/go-git/v5 v5.16.2
 	github.com/hertz-contrib/gzip v0.0.3
 	github.com/hertz-contrib/http2 v0.1.8
 )
