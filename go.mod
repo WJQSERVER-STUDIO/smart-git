@@ -5,7 +5,7 @@ go 1.24.3
 require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/WJQSERVER-STUDIO/logger v1.8.0
-	github.com/cloudwego/hertz v0.10.0
+	github.com/cloudwego/hertz v0.10.1
 	github.com/go-git/go-billy/v5 v5.6.2
 	github.com/go-git/go-git/v5 v5.16.2
 	github.com/hertz-contrib/gzip v0.0.3
