@@ -5,7 +5,7 @@ go 1.24.3
 require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/WJQSERVER-STUDIO/logger v1.8.0
-	github.com/cloudwego/hertz v0.10.0
+	github.com/cloudwego/hertz v0.10.2
 	github.com/go-git/go-billy/v5 v5.6.2
 	github.com/go-git/go-git/v5 v5.16.2
 	github.com/hertz-contrib/gzip v0.0.3
@@ -16,8 +16,8 @@ require (
 	github.com/WJQSERVER-STUDIO/go-utils/copyb v0.0.4 // indirect
 	github.com/WJQSERVER-STUDIO/go-utils/log v0.0.3 // indirect
 	github.com/bytedance/gopkg v0.1.2 // indirect
-	github.com/bytedance/sonic v1.13.3 // indirect
-	github.com/bytedance/sonic/loader v0.2.4 // indirect
+	github.com/bytedance/sonic v1.14.0 // indirect
+	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.5 // indirect
 	github.com/cloudwego/gopkg v0.1.5 // indirect
 	github.com/cloudwego/netpoll v0.7.1 // indirect
