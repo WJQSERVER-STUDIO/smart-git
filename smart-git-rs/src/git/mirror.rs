@@ -66,6 +66,10 @@ impl MirrorService {
         })
     }
 
+    pub fn local_path(&self, repo_id: &RepoId) -> PathBuf {
+        self.repo_root.join(repo_id.local_rel_path())
+    }
+
     fn fetch_existing(
         &self,
         repo: gix::Repository,
@@ -96,7 +100,7 @@ impl MirrorService {
         })
     }
 
-    fn upstream_url(&self, repo_id: &RepoId) -> String {
+    pub fn upstream_url(&self, repo_id: &RepoId) -> String {
         format!(
             "{}/{}/{}.git",
             self.github_base,

@@ -44,6 +44,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
         git_http_state,
         config.cache.refresh_ttl(),
     ));
+    lifecycle.recover_pending().await?;
 
     let state = AppState {
         config,

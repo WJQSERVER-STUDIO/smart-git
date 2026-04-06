@@ -23,6 +23,9 @@ The new Rust scaffold in `smart-git-rs/` keeps the same product boundary:
   - container-friendly defaults under `/data/smart-git`
   - `PathBuf` everywhere for path handling
   - configurable TTL and background refresh scan interval
+  - dual config loader with `config.wanf` preferred over `config.toml`
+- `smart-git-rs/config.wanf`
+  - preferred example configuration, aligned with the Go-side migration toward WANF
 - `smart-git-rs/src/repo_id.rs`
   - validated repo identifiers to avoid path traversal and Windows-reserved names
 - `smart-git-rs/src/git/mirror.rs`
@@ -83,3 +86,13 @@ Current stage:
 2. verify response compatibility for `info/refs` and `git-upload-pack` against the current Go implementation
 3. port any existing `/api/db/data` and `/api/db/sum` consumers to the Rust process
 4. add per-repository refresh de-duplication so concurrent stale requests do not race the same upstream fetch
+
+## Config Priority
+
+The Rust service now supports both TOML and WANF configuration files.
+
+- default lookup order: `/data/smart-git/config/config.wanf` then `/data/smart-git/config/config.toml`
+- explicit `-c /path/to/file.wanf` loads WANF directly
+- explicit `-c /path/to/file.toml` loads TOML directly
+- explicit `-c /path/to/config` tries `config.wanf` first, then `config.toml`
+- explicit `-c ...` still fails startup if the requested file cannot be resolved

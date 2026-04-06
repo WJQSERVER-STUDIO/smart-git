@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -94,16 +94,30 @@ impl Config {
         PathBuf::from("/data/smart-git/config/config.toml")
     }
 
-    pub fn load(path: Option<&Path>) -> anyhow::Result<Self> {
-        let path = path.map(PathBuf::from).unwrap_or_else(Self::default_path);
-        if !path.exists() {
-            return Ok(Self::default());
-        }
+    pub fn default_wanf_path() -> PathBuf {
+        PathBuf::from("/data/smart-git/config/config.wanf")
+    }
 
-        let raw = fs::read_to_string(&path)
-            .with_context(|| format!("failed to read config file {}", path.display()))?;
-        toml::from_str(&raw)
-            .with_context(|| format!("failed to parse config file {}", path.display()))
+    pub fn load(path: Option<&Path>) -> anyhow::Result<Self> {
+        let path = match path {
+            Some(path) => Some(resolve_explicit_path(path)?),
+            None => resolve_default_path(),
+        };
+
+        let Some(path) = path else {
+            return Ok(Self::default());
+        };
+
+        match path.extension().and_then(|ext| ext.to_str()) {
+            Some("wanf") => wanf_rs::decode_file(&path)
+                .with_context(|| format!("failed to parse WANF config file {}", path.display())),
+            _ => {
+                let raw = fs::read_to_string(&path)
+                    .with_context(|| format!("failed to read config file {}", path.display()))?;
+                toml::from_str(&raw)
+                    .with_context(|| format!("failed to parse TOML config file {}", path.display()))
+            }
+        }
     }
 
     pub fn ensure_dirs(&self) -> anyhow::Result<()> {
@@ -122,6 +136,42 @@ impl Config {
 
         Ok(())
     }
+}
+
+fn resolve_default_path() -> Option<PathBuf> {
+    let wanf = Config::default_wanf_path();
+    if wanf.exists() {
+        return Some(wanf);
+    }
+
+    let toml = Config::default_path();
+    if toml.exists() {
+        return Some(toml);
+    }
+
+    None
+}
+
+fn resolve_explicit_path(path: &Path) -> anyhow::Result<PathBuf> {
+    if path.exists() {
+        return Ok(path.to_path_buf());
+    }
+
+    if path.extension().is_some() {
+        bail!("config file not found: {}", path.display());
+    }
+
+    let wanf = path.with_extension("wanf");
+    if wanf.exists() {
+        return Ok(wanf);
+    }
+
+    let toml = path.with_extension("toml");
+    if toml.exists() {
+        return Ok(toml);
+    }
+
+    bail!("config file not found: {} (.wanf or .toml)", path.display())
 }
 
 impl ServerConfig {

@@ -559,9 +559,12 @@ dependencies = [
  "base64",
  "flate2",
  "git-server-core",
+ "http-body-util",
  "serde",
  "serde_json",
+ "subtle",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "tracing",
  "zstd",
@@ -2271,6 +2274,7 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
+ "wanf-rs",
 ]
 
 [[package]]
@@ -2312,6 +2316,12 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
+
+[[package]]
+name = "subtle"
+version = "2.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "syn"
@@ -2638,6 +2648,15 @@ checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
 dependencies = [
  "same-file",
  "winapi-util",
+]
+
+[[package]]
+name = "wanf-rs"
+version = "0.1.0"
+dependencies = [
+ "indexmap",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

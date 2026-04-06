@@ -8,6 +8,7 @@ pub struct RepoCacheRecord {
     pub local_path: String,
     pub head_oid: Option<String>,
     pub updated_at: i64,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

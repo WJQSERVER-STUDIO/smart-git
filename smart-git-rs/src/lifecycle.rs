@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, Weak},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -16,7 +16,7 @@ pub struct RepositoryLifecycleManager {
     mirror_service: Arc<MirrorService>,
     git_http_state: GitHttpState,
     refresh_ttl: Duration,
-    repo_locks: Mutex<HashMap<String, Arc<AsyncMutex<()>>>>,
+    repo_locks: Mutex<HashMap<String, Weak<AsyncMutex<()>>>>,
 }
 
 impl RepositoryLifecycleManager {
@@ -77,6 +77,30 @@ impl RepositoryLifecycleManager {
         Ok(refreshed)
     }
 
+    pub async fn recover_pending(&self) -> anyhow::Result<()> {
+        let pending = self.db.list_pending_records()?;
+        for record in pending {
+            let repo_id = RepoId::new(record.owner.clone(), record.name.clone())?;
+            let path = Path::new(&record.local_path);
+
+            if !local_repo_is_usable(&record.local_path) {
+                self.db.delete_cache_record(&repo_id)?;
+                continue;
+            }
+
+            let recovered = RepoCacheRecord {
+                head_oid: local_repo_head_oid(path),
+                status: "synced".to_owned(),
+                ..record
+            };
+
+            self.db
+                .apply_lifecycle_update(&repo_id, Some(&recovered), false, false)?;
+        }
+
+        Ok(())
+    }
+
     async fn sync_with_policy(
         &self,
         repo_id: &RepoId,
@@ -88,6 +112,15 @@ impl RepositoryLifecycleManager {
 
         let cached = self.db.get_cache_record(repo_id).map_err(to_internal)?;
         let should_refresh = self.should_refresh(cached.as_ref(), refresh_policy)?;
+
+        if should_refresh {
+            let pending = pending_record(repo_id, cached.as_ref(), self.mirror_service.as_ref())
+                .map_err(to_internal)?;
+            self.db
+                .apply_lifecycle_update(repo_id, Some(&pending), false, false)
+                .map_err(to_internal)?;
+        }
+
         let outcome = if should_refresh {
             Some(self.mirror_service.sync(repo_id).map_err(to_internal)?)
         } else {
@@ -104,6 +137,7 @@ impl RepositoryLifecycleManager {
                 local_path: outcome.local_path.display().to_string(),
                 head_oid: outcome.head_oid,
                 updated_at: unix_timestamp().map_err(to_internal)?,
+                status: "synced".to_owned(),
             },
             (None, None) => {
                 return Err(AppError::Internal(
@@ -150,6 +184,10 @@ impl RepositoryLifecycleManager {
             return Ok(true);
         };
 
+        if record.status != "synced" {
+            return Ok(true);
+        }
+
         if !local_repo_is_usable(&record.local_path) {
             return Ok(true);
         }
@@ -164,10 +202,14 @@ impl RepositoryLifecycleManager {
             .repo_locks
             .lock()
             .expect("repo lifecycle lock map poisoned");
-        repo_locks
-            .entry(key)
-            .or_insert_with(|| Arc::new(AsyncMutex::new(())))
-            .clone()
+        if let Some(weak) = repo_locks.get(&key) {
+            if let Some(arc) = weak.upgrade() {
+                return arc;
+            }
+        }
+        let lock = Arc::new(AsyncMutex::new(()));
+        repo_locks.insert(key, Arc::downgrade(&lock));
+        lock
     }
 }
 
@@ -216,6 +258,46 @@ fn local_repo_is_usable(path: &str) -> bool {
         Ok(repo) => repo.is_bare(),
         Err(_) => false,
     }
+}
+
+fn local_repo_head_oid(path: &Path) -> Option<String> {
+    gix::open(path)
+        .ok()
+        .filter(|repo| repo.is_bare())
+        .and_then(|repo| {
+            repo.head()
+                .ok()
+                .and_then(|head| head.id().map(|oid| oid.to_string()))
+        })
+}
+
+fn pending_record(
+    repo_id: &RepoId,
+    cached: Option<&RepoCacheRecord>,
+    mirror_service: &MirrorService,
+) -> anyhow::Result<RepoCacheRecord> {
+    let updated_at = unix_timestamp()?;
+
+    Ok(match cached {
+        Some(record) => RepoCacheRecord {
+            owner: record.owner.clone(),
+            name: record.name.clone(),
+            upstream_url: record.upstream_url.clone(),
+            local_path: record.local_path.clone(),
+            head_oid: record.head_oid.clone(),
+            updated_at,
+            status: "pending".to_owned(),
+        },
+        None => RepoCacheRecord {
+            owner: repo_id.owner().to_owned(),
+            name: repo_id.name().to_owned(),
+            upstream_url: mirror_service.upstream_url(repo_id),
+            local_path: mirror_service.local_path(repo_id).display().to_string(),
+            head_oid: None,
+            updated_at,
+            status: "pending".to_owned(),
+        },
+    })
 }
 
 fn unix_timestamp() -> anyhow::Result<i64> {
