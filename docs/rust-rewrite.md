@@ -1,98 +1,111 @@
-# Rust Rewrite Notes
+# Rust 重写说明
 
-## Scope
+## 范围
 
-This repository currently serves one concrete job: cache GitHub repositories as local bare mirrors and expose metadata/statistics around that cache.
+这个仓库当前做的事情很明确：
 
-The new Rust scaffold in `smart-git-rs/` keeps the same product boundary:
+- 把 GitHub 仓库缓存成可复用的本地 bare mirror
+- 对外提供 Git Smart HTTP 服务
+- 暴露缓存元数据与统计信息
 
-- container-first deployment
-- GitHub as the default upstream
-- `git-server-http` + `git-server-core` for Smart HTTP protocol handling
-- `gix` for repository clone and fetch
-- SQLite for cache metadata and counters
+`smart-git-rs/` 目录下的 Rust 实现，保持了与现有产品边界一致的目标：
 
-## What Was Added
+- 容器部署优先
+- GitHub 作为默认上游
+- 使用 crates.io `gitserver-http` / `gitserver-core` 处理 Smart HTTP 协议
+- 使用 `gix` 进行 clone / fetch / repo 状态检查
+- 使用 SQLite 存储缓存元数据和统计信息
+
+## 已加入的核心内容
 
 - `smart-git-rs/Cargo.toml`
-  - `git-server-http` + `git-server-core` for server-side Git protocol handling
-  - `gix` with blocking network client support for mirror sync
-  - `rusqlite` with `bundled`
-  - `axum` + `tokio` for the HTTP surface
+  - 使用 crates.io `gitserver-http` / `gitserver-core`
+  - `gix` 负责 mirror 同步
+  - `rusqlite`（`bundled`）负责 SQLite
+  - `axum` + `tokio` 提供 HTTP 服务层
 - `smart-git-rs/src/config.rs`
-  - container-friendly defaults under `/data/smart-git`
-  - `PathBuf` everywhere for path handling
-  - configurable TTL and background refresh scan interval
-  - dual config loader with `config.wanf` preferred over `config.toml`
+  - 默认路径对齐容器部署
+  - 本地路径统一使用 `PathBuf`
+  - 支持 WANF/TOML 双格式配置，WANF 优先
 - `smart-git-rs/config.wanf`
-  - preferred example configuration, aligned with the Go-side migration toward WANF
+  - 推荐配置示例
 - `smart-git-rs/src/repo_id.rs`
-  - validated repo identifiers to avoid path traversal and Windows-reserved names
+  - 校验 repo id，避免路径穿越和 Windows 保留名
 - `smart-git-rs/src/git/mirror.rs`
-  - bare mirror clone/fetch against GitHub using `gix`
+  - 基于 `gix` 的 bare mirror clone/fetch
 - `smart-git-rs/src/db.rs`
-  - SQLite schema for mirror metadata and stats
+  - SQLite schema、生命周期写入与统计更新
 - `smart-git-rs/src/http/admin.rs`
   - `healthz`
-  - metadata/stat endpoints
-  - a manual sync endpoint to exercise the mirror flow
+  - 元数据/统计接口
+  - 手动 sync 接口
+  - 管理 API 默认输出 WANF
 - `smart-git-rs/src/http/git_http.rs`
-  - dynamic `info/refs` and `git-upload-pack` routes
-  - TTL-aware mirror sync before protocol handling
-  - direct use of the enhanced `git-server-http` endpoint APIs
+  - `info/refs`
+  - `git-upload-pack`
+  - 在协议处理前执行 TTL / 生命周期同步
 - `smart-git-rs/src/lifecycle.rs`
-  - centralizes repository lifecycle rules, per-repo serialization, SQLite updates, registry registration, TTL gating, and background stale refresh
-- `smart-git-rs/Dockerfile`
-  - native Docker build path for the Rust service
+  - 仓库生命周期规则集中管理
+  - 每仓库串行化
+  - SQLite 更新
+  - registry 注册
+  - 缺记录修复
+  - 启动自愈
 
-## Architectural Direction
+## 架构方向
 
-Using `git-server-http` and `git-server-core` aligns the protocol layer with `gix`, which those crates already use internally. That avoids maintaining two independent Git implementations in the same service.
+使用 `gitserver-http` / `gitserver-core` 与 `gix` 的组合，可以保持 Rust 侧协议实现和 Git 数据访问都在同一套 Rust 生态里，不必混用多套 Git 实现。
 
-What `gix` covers well here:
+### `gix` 在这里负责的事情
 
-- clone public GitHub repos
-- fetch updates into existing bare mirrors
-- inspect refs and repository state
-- keep repo storage inside the Rust service
+- clone 公共 GitHub 仓库
+- 对现有 bare mirror 执行 fetch 更新
+- 检查 refs 和本地 repo 状态
+- 保持 repo 数据完全在服务内维护
 
-What `git-server-http` covers for us:
+### `gitserver-http` 在这里负责的事情
 
 - `GET /:user/:repo/info/refs?service=git-upload-pack`
 - `POST /:user/:repo/git-upload-pack`
-- packet-line framing and stateless RPC behavior compatible with Git clients
+- packet-line / stateless RPC 行为
 
-One implementation detail remains important: `git-server-http::router(store)` assumes repositories are already discovered under a root directory. This project is dynamic, so the current Rust scaffold wraps that router instead of exposing it directly. It performs request-time mirror sync, discovers the relevant repository root, rewrites the incoming URI to the router's static repo layout, and then delegates request handling to the local enhanced `git-server-http` implementation.
+一个关键点是：协议层假设仓库已经在本地 registry 中可发现，而本项目是动态缓存服务，不是静态 repo 根目录服务。因此 Rust 实现当前采用的是：
 
-Current stage:
+1. 请求进入
+2. 生命周期层执行 request-time sync
+3. 若本地 repo 可修复则自愈
+4. 将 repo 注册进本地 registry
+5. 再把请求交给 `gitserver-http`
 
-1. move cache, metadata, config, and admin APIs to Rust
-2. switch mirror management from `git2-rs` to `gix`
-3. front the local enhanced `git-server-http` with dynamic registry-backed repository resolution
-4. gate upstream fetches with TTL and a background stale refresh scan
-5. validate with real Git clients before replacing the Go server
+## 当前阶段
 
-## Why This Shape Improves Portability
+1. 把缓存、元数据、配置和管理 API 迁到 Rust
+2. 把 mirror 管理从旧形态切到 `gix`
+3. 用 registry-backed 方式承接动态 repo 解析
+4. 用 TTL + 启动/请求触发自愈来管理生命周期
+5. 在真正替换 Go 服务前，持续用真实 Git 客户端验证兼容性
 
-- Docker remains the primary deployment target
-- `gix` and `git-server-*` stay in the Rust Git ecosystem instead of mixing `libgit2` and native Rust Git implementations
-- bundled SQLite avoids system SQLite mismatches
-- repo IDs are validated before becoming filesystem paths
-- all local paths use `PathBuf` instead of string concatenation
+## 为什么这种形状更适合后续演进
 
-## Suggested Next Steps
+- 容器部署仍然是第一优先级
+- 避免在 Rust 服务里混用多套 Git 实现
+- bundled SQLite 避免系统 SQLite 版本不一致
+- repo id 在进入文件系统前已经校验
+- 全部路径使用 `PathBuf`
 
-1. add integration tests with a real `git clone` client against the Rust service
-2. verify response compatibility for `info/refs` and `git-upload-pack` against the current Go implementation
-3. port any existing `/api/db/data` and `/api/db/sum` consumers to the Rust process
-4. add per-repository refresh de-duplication so concurrent stale requests do not race the same upstream fetch
+## 后续建议
 
-## Config Priority
+1. 增加真实 `git clone` 集成测试
+2. 继续验证 `info/refs` / `git-upload-pack` 与 Go 的兼容性
+3. 把 Rust 独有的管理接口与 Go 的管理面逐步对齐
+4. 决定后台 refresh loop 是否继续保留，还是缩减成 janitor/self-heal 角色
 
-The Rust service now supports both TOML and WANF configuration files.
+## 配置优先级
 
-- default lookup order: `/data/smart-git/config/config.wanf` then `/data/smart-git/config/config.toml`
-- explicit `-c /path/to/file.wanf` loads WANF directly
-- explicit `-c /path/to/file.toml` loads TOML directly
-- explicit `-c /path/to/config` tries `config.wanf` first, then `config.toml`
-- explicit `-c ...` still fails startup if the requested file cannot be resolved
+Rust 服务支持 WANF 和 TOML 两种配置格式：
+
+- 默认查找顺序：`/data/smart-git/config/config.wanf`，然后 `/data/smart-git/config/config.toml`
+- 显式传 `-c /path/to/file.wanf`：直接按 WANF 加载
+- 显式传 `-c /path/to/file.toml`：直接按 TOML 加载
+- 显式传 `-c /path/to/config`：先尝试 `config.wanf`，再尝试 `config.toml`
+- 显式路径找不到时会直接启动失败，不会静默回退

@@ -135,7 +135,7 @@ where
     E: Into<anyhow::Error>,
 {
     fn from(error: E) -> Self {
-        Self::bad_request(error)
+        Self::internal(error)
     }
 }
 

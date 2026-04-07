@@ -1,4 +1,5 @@
 mod admin;
+mod admin_tests;
 mod git_http;
 mod wanf;
 

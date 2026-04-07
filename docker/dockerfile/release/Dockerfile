@@ -1,45 +1,32 @@
-FROM alpine:latest AS builder
+FROM golang:1.26-alpine AS build
 
-ARG USER=WJQSERVER-STUDIO
-ARG REPO=smart-git
-ARG APPLICATION=smart-git
+WORKDIR /src
+
 ARG TARGETOS
 ARG TARGETARCH
-ARG TARGETPLATFORM
 
-# 创建文件夹
-RUN mkdir -p /data/${APPLICATION}/repos
-RUN mkdir -p /data/${APPLICATION}/config 
-RUN mkdir -p /data/${APPLICATION}/log 
-RUN mkdir -p /data/${APPLICATION}/db
+COPY go.mod go.sum ./
+RUN go mod download
 
-# 安装依赖
-RUN apk add --no-cache curl wget tar
+COPY . .
 
-# 后端
-RUN VERSION=$(curl -s https://raw.githubusercontent.com/${USER}/${REPO}/main/VERSION) && \
-    wget -O /data/${APPLICATION}/${APPLICATION}-${TARGETOS}-${TARGETARCH}.tar.gz https://github.com/${USER}/${REPO}/releases/download/$VERSION/${APPLICATION}-${TARGETOS}-${TARGETARCH}.tar.gz && \
-    tar -zxvf /data/${APPLICATION}/${APPLICATION}-${TARGETOS}-${TARGETARCH}.tar.gz -C /data/${APPLICATION} && \
-    rm -rf /data/${APPLICATION}/${APPLICATION}-${TARGETOS}-${TARGETARCH}.tar.gz
-RUN wget -O /usr/local/bin/init.sh https://raw.githubusercontent.com/${USER}/${REPO}/main/docker/dockerfile/release/init.sh
-
-# 拉取配置
-RUN wget -O /data/${APPLICATION}/config.toml https://raw.githubusercontent.com/${USER}/${REPO}/main/config/config.toml
-
-# 权限
-RUN chmod +x /data/${APPLICATION}/${APPLICATION}
-RUN chmod +x /usr/local/bin/init.sh
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags "-s -w" -o /out/smart-git .
 
 FROM alpine:latest
 
-RUN apk add --no-cache curl
+RUN apk add --no-cache ca-certificates
 
-COPY --from=builder /data/${APPLICATION} /data/${APPLICATION}
-COPY --from=builder /usr/local/bin/init.sh /usr/local/bin/init.sh
+WORKDIR /data/smart-git
 
-# 权限
-RUN chmod +x /data/${APPLICATION}/${APPLICATION}
-RUN chmod +x /usr/local/bin/init.sh
+COPY --from=build /out/smart-git /usr/local/bin/smart-git
+COPY config/config.toml /data/smart-git/config.toml
+COPY docker/dockerfile/release/init.sh /usr/local/bin/init.sh
+
+RUN mkdir -p /data/smart-git/repos /data/smart-git/config /data/smart-git/log /data/smart-git/db \
+    && chmod +x /usr/local/bin/smart-git /usr/local/bin/init.sh \
+    && rm -rf /var/cache/apk/*
+
+EXPOSE 8080
 
 CMD ["/usr/local/bin/init.sh"]
-

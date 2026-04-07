@@ -23,8 +23,7 @@ func serviceRPC(baseRepoDir string) touka.HandlerFunc {
 
 		repoName := c.Param("repo")
 		if repoName == "" {
-			logError("repoName is empty")
-			c.JSON(http.StatusBadRequest, touka.H{"error": "repoName is required"})
+			renderStatusError(w, http.StatusBadRequest)
 			return
 		}
 		userName := c.Param("user")
@@ -43,12 +42,12 @@ func serviceRPC(baseRepoDir string) touka.HandlerFunc {
 
 		if err := ensureRepoReady(baseRepoDir, userName, repoName); err != nil {
 			if err == plumbing.ErrReferenceNotFound {
-				c.JSON(http.StatusNotFound, touka.H{"error": err.Error()})
+				renderStatusError(w, http.StatusNotFound)
 				return
 			}
 
 			logError("ensure repo failed: %v, repo: %s\n", err, repoName)
-			c.JSON(http.StatusInternalServerError, touka.H{"error": err.Error()})
+			renderStatusError(w, http.StatusInternalServerError)
 			return
 		}
 
@@ -64,7 +63,7 @@ func serviceRPC(baseRepoDir string) touka.HandlerFunc {
 			reader, err = gzip.NewReader(r.Body)
 			if err != nil {
 				logError("Error creating gzip reader: %v, repo: %s\n", err, repoName)
-				c.JSON(http.StatusBadRequest, touka.H{"error": err.Error()})
+				renderStatusError(w, http.StatusBadRequest)
 				return
 			}
 			defer reader.Close() //nolint:errcheck
@@ -77,7 +76,7 @@ func serviceRPC(baseRepoDir string) touka.HandlerFunc {
 		ep, err := transport.NewEndpoint(endpoint)
 		if err != nil {
 			logError("Error creating endpoint: %v, repo: %s\n", err, repoName)
-			c.JSON(http.StatusBadRequest, touka.H{"error": err.Error()})
+			renderStatusError(w, http.StatusBadRequest)
 			return
 		}
 
@@ -86,7 +85,7 @@ func serviceRPC(baseRepoDir string) touka.HandlerFunc {
 		st, err := ld.Load(ep)
 		if err != nil {
 			logError("Error loading filesystem: %v, repo: %s\n", err, repoName)
-			c.JSON(http.StatusInternalServerError, touka.H{"error": err.Error()})
+			renderStatusError(w, http.StatusInternalServerError)
 			return
 		}
 
@@ -106,11 +105,11 @@ func serviceRPC(baseRepoDir string) touka.HandlerFunc {
 					StatelessRPC:  true,
 				})
 		default:
-			c.JSON(http.StatusBadRequest, touka.H{"error": "unsupported service"})
+			renderStatusError(w, http.StatusBadRequest)
 			return
 		}
 		if err != nil {
-			c.JSON(http.StatusBadRequest, touka.H{"error": err.Error()})
+			renderStatusError(w, http.StatusInternalServerError)
 			return
 		}
 	}

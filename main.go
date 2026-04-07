@@ -10,6 +10,7 @@ import (
 	"smart-git/config"
 	"smart-git/database"
 	"smart-git/gitc"
+	"strings"
 
 	"github.com/WJQSERVER-STUDIO/logger"
 )
@@ -58,6 +59,12 @@ func setMemLimit(cfg *config.Config) {
 
 // init
 func init() {
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(arg, "-test.") || arg == "-test.v" {
+			return
+		}
+	}
+
 	ReadFlag()
 	loadConfig()
 	setMemLimit(cfg)
