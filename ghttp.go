@@ -37,24 +37,34 @@ func (f *flushResponseWriter) ReadFrom(r io.Reader) (int64, error) {
 	p := make([]byte, f.chunkSize)
 	for {
 		nr, err := r.Read(p)
+		if nr > 0 {
+			nw, writeErr := f.ResponseWriter.Write(p[:nr])
+			if writeErr != nil {
+				logf(f.log, "error writing response: %v", writeErr)
+				renderStatusError(f.ResponseWriter, http.StatusInternalServerError)
+				return n, writeErr
+			}
+			if nr != nw {
+				logf(f.log, "mismatched bytes written: expected %d, wrote %d", nr, nw)
+				return n, io.ErrShortWrite
+			}
+			n += int64(nr)
+			if flushErr := flusher.Flush(); flushErr != nil {
+				logf(f.log, "error while flush: %v", flushErr)
+				renderStatusError(f.ResponseWriter, http.StatusInternalServerError)
+				return n, fmt.Errorf("%w: error while flush", flushErr)
+			}
+		}
+
+		if err == nil {
+			continue
+		}
 		if errors.Is(err, io.EOF) {
 			break
 		}
-		nw, err := f.ResponseWriter.Write(p[:nr])
-		if err != nil {
-			logf(f.log, "error writing response: %v", err)
-			renderStatusError(f.ResponseWriter, http.StatusInternalServerError)
-			return n, err
-		}
-		if nr != nw {
-			return n, err
-		}
-		n += int64(nr)
-		if err := flusher.Flush(); err != nil {
-			logf(f.log, "mismatched bytes written: expected %d, wrote %d", nr, nw)
-			renderStatusError(f.ResponseWriter, http.StatusInternalServerError)
-			return n, fmt.Errorf("%w: error while flush", err)
-		}
+
+		logf(f.log, "error reading response stream: %v", err)
+		return n, err
 	}
 
 	return n, nil
@@ -375,22 +385,45 @@ func writeAdvertisedRefs(
 	}
 
 	ar := packp.NewAdvRefs()
-	ar.Capabilities.Set(capability.Agent, capability.DefaultAgent()) //nolint:errcheck
-	ar.Capabilities.Set(capability.OFSDelta)                         //nolint:errcheck
-	ar.Capabilities.Set(capability.Sideband64k)                      //nolint:errcheck
+	if err := ar.Capabilities.Set(capability.Agent, capability.DefaultAgent()); err != nil {
+		return err
+	}
+	if err := ar.Capabilities.Set(capability.OFSDelta); err != nil {
+		return err
+	}
+	if err := ar.Capabilities.Set(capability.Sideband64k); err != nil {
+		return err
+	}
 
 	if service == transport.ReceivePackService {
-		ar.Capabilities.Set(capability.NoThin)       //nolint:errcheck
-		ar.Capabilities.Set(capability.DeleteRefs)   //nolint:errcheck
-		ar.Capabilities.Set(capability.ReportStatus) //nolint:errcheck
-		ar.Capabilities.Set(capability.PushOptions)  //nolint:errcheck
-		ar.Capabilities.Set(capability.Quiet)        //nolint:errcheck
+		if err := ar.Capabilities.Set(capability.NoThin); err != nil {
+			return err
+		}
+		if err := ar.Capabilities.Set(capability.DeleteRefs); err != nil {
+			return err
+		}
+		if err := ar.Capabilities.Set(capability.ReportStatus); err != nil {
+			return err
+		}
+		if err := ar.Capabilities.Set(capability.PushOptions); err != nil {
+			return err
+		}
+		if err := ar.Capabilities.Set(capability.Quiet); err != nil {
+			return err
+		}
 	} else {
-		ar.Capabilities.Set(capability.MultiACK)         //nolint:errcheck
-		ar.Capabilities.Set(capability.MultiACKDetailed) //nolint:errcheck
-		ar.Capabilities.Set(capability.Sideband)         //nolint:errcheck
-		ar.Capabilities.Set(capability.SymRef)           //nolint:errcheck
-		ar.Capabilities.Set(capability.Shallow)          //nolint:errcheck
+		if err := ar.Capabilities.Set(capability.MultiACK); err != nil {
+			return err
+		}
+		if err := ar.Capabilities.Set(capability.MultiACKDetailed); err != nil {
+			return err
+		}
+		if err := ar.Capabilities.Set(capability.Sideband); err != nil {
+			return err
+		}
+		if err := ar.Capabilities.Set(capability.Shallow); err != nil {
+			return err
+		}
 	}
 
 	if err := addAdvertisedReferences(st, ar, service == transport.UploadPackService); err != nil {
@@ -428,7 +461,11 @@ func addAdvertisedReferences(st storage.Storer, ar *packp.AdvRefs, addHead bool)
 			if !addHead {
 				return nil
 			}
-			ar.Capabilities.Add(capability.SymRef, fmt.Sprintf("%s:%s", name, r.Target())) //nolint:errcheck
+			if r.Type() == plumbing.SymbolicReference {
+				if err := ar.Capabilities.Add(capability.SymRef, fmt.Sprintf("%s:%s", name, r.Target())); err != nil {
+					return err
+				}
+			}
 			ar.Head = &hash
 		}
 

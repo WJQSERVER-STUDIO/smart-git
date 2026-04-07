@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::Context;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, Error as SqlError, ErrorCode};
 
 use crate::{
     model::{RepoCacheRecord, RepoStatsRecord},
@@ -54,21 +54,27 @@ impl Database {
         )
         .context("failed to initialize sqlite schema")?;
 
-        conn.execute(
-            "ALTER TABLE repo_cache ADD COLUMN status TEXT NOT NULL DEFAULT 'synced'",
-            [],
-        )
-        .ok();
-        conn.execute(
-            "ALTER TABLE repo_cache ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0",
-            [],
-        )
-        .ok();
-        conn.execute(
-            "ALTER TABLE repo_cache ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0",
-            [],
-        )
-        .ok();
+        ignore_duplicate_column(
+            conn.execute(
+                "ALTER TABLE repo_cache ADD COLUMN status TEXT NOT NULL DEFAULT 'synced'",
+                [],
+            ),
+            "status",
+        )?;
+        ignore_duplicate_column(
+            conn.execute(
+                "ALTER TABLE repo_cache ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0",
+                [],
+            ),
+            "created_at",
+        )?;
+        ignore_duplicate_column(
+            conn.execute(
+                "ALTER TABLE repo_cache ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0",
+                [],
+            ),
+            "expires_at",
+        )?;
 
         Ok(())
     }
@@ -378,5 +384,18 @@ impl Database {
         self.conn
             .lock()
             .map_err(|_| anyhow::anyhow!("sqlite mutex poisoned"))
+    }
+}
+
+fn ignore_duplicate_column(result: rusqlite::Result<usize>, column: &str) -> anyhow::Result<()> {
+    match result {
+        Ok(_) => Ok(()),
+        Err(SqlError::SqliteFailure(error, Some(message)))
+            if error.code == ErrorCode::Unknown
+                && message.contains(&format!("duplicate column name: {column}")) =>
+        {
+            Ok(())
+        }
+        Err(error) => Err(error).with_context(|| format!("failed to add column {column}")),
     }
 }

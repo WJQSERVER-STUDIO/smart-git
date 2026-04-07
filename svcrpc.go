@@ -82,7 +82,7 @@ func serviceRPC(baseRepoDir string) touka.HandlerFunc {
 		}
 
 		bfs := osfs.New(baseRepoDir)
-		ld := gitserver.NewFilesystemLoader(bfs, false)
+		ld := gitserver.NewFilesystemLoader(bfs, true)
 		st, err := ld.Load(ep)
 		if err != nil {
 			logError("Error loading filesystem: %v, repo: %s\n", err, repoName)

@@ -43,7 +43,7 @@ func handleInfoRefs(baseRepoDir string) touka.HandlerFunc {
 		c.SetHeader("Content-Type", "application/x-git-upload-pack-advertisement")
 
 		bfs := osfs.New(baseRepoDir)
-		ld := gitserver.NewFilesystemLoader(bfs, false)
+		ld := gitserver.NewFilesystemLoader(bfs, true)
 		epStr := "/" + userName + "/" + repoName
 		c.Infof("epStr: %s\n", epStr)
 		ep, err := transport.NewEndpoint(epStr)

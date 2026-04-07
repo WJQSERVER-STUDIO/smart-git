@@ -129,10 +129,10 @@ impl RepositoryLifecycleManager {
         let repo_lock = self.repo_lock(repo_id);
         let _guard = repo_lock.lock().await;
 
-        let cached = self
-            .repair_missing_record(repo_id)
-            .map_err(to_internal)?
-            .or(self.db.get_cache_record(repo_id).map_err(to_internal)?);
+        let cached = match self.db.get_cache_record(repo_id).map_err(to_internal)? {
+            Some(record) => Some(record),
+            None => self.repair_missing_record(repo_id).map_err(to_internal)?,
+        };
         let should_refresh = self.should_refresh(cached.as_ref(), refresh_policy)?;
 
         if should_refresh {
@@ -232,6 +232,7 @@ impl RepositoryLifecycleManager {
             .repo_locks
             .lock()
             .expect("repo lifecycle lock map poisoned");
+        repo_locks.retain(|_, weak| weak.strong_count() > 0);
         if let Some(weak) = repo_locks.get(&key) {
             if let Some(arc) = weak.upgrade() {
                 return arc;

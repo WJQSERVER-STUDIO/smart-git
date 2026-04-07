@@ -50,9 +50,10 @@ fn validate_component(label: &str, value: &str) -> anyhow::Result<()> {
         bail!("{label} contains unsupported characters");
     }
 
+    let stem = value.split('.').next().unwrap_or(value);
     if WINDOWS_RESERVED_NAMES
         .iter()
-        .any(|reserved| reserved.eq_ignore_ascii_case(value))
+        .any(|reserved| reserved.eq_ignore_ascii_case(stem))
     {
         bail!("{label} uses a reserved Windows file name");
     }

@@ -30,6 +30,8 @@ github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/emirpasic/gods v1.18.1 h1:FXtiHYKDGKCW2KzwZKx0iC0PQmdlorYgdFG9jPXJ1Bc=
 github.com/emirpasic/gods v1.18.1/go.mod h1:8tpGGwCnJ5H4r6BWwaV6OrWmMoPhUl5jm/FMNAnJvWQ=
+github.com/fenthope/compress v0.0.3 h1:HerAPZjRwpXzhnC5iunUE0rb1CtcDkAvQHNtKtLH5Ec=
+github.com/fenthope/compress v0.0.3/go.mod h1:/3+aXXRWs9HOOf7fe1m4UhV04/aHco8YxuxeXJeWlzE=
 github.com/fenthope/reco v0.0.5 h1:Z/bOunFf4LSgYP/IxG9fe2pTrIq7bPsDflflbNR5Agw=
 github.com/fenthope/reco v0.0.5/go.mod h1:nd5gMkuJHN2+2Iwwt3xy+HSqRaROauIjHNkmQWRsHyM=
 github.com/fenthope/record v0.0.4 h1:/1JHNCxiXGLL/qCh4LEGaAvhj4CcKsb6siTxjLmjdO4=

@@ -95,31 +95,65 @@ pub async fn sync_repo(
 
 type ApiResult<T> = Result<T, ApiError>;
 
-pub(crate) struct ApiError(anyhow::Error);
+pub(crate) struct ApiError {
+    status: StatusCode,
+    error: anyhow::Error,
+}
+
+impl ApiError {
+    fn bad_request(error: impl Into<anyhow::Error>) -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            error: error.into(),
+        }
+    }
+
+    fn not_found(error: impl Into<anyhow::Error>) -> Self {
+        Self {
+            status: StatusCode::NOT_FOUND,
+            error: error.into(),
+        }
+    }
+
+    fn unauthorized(error: impl Into<anyhow::Error>) -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
+            error: error.into(),
+        }
+    }
+
+    fn internal(error: impl Into<anyhow::Error>) -> Self {
+        Self {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            error: error.into(),
+        }
+    }
+}
 
 impl<E> From<E> for ApiError
 where
     E: Into<anyhow::Error>,
 {
     fn from(error: E) -> Self {
-        Self(error.into())
+        Self::bad_request(error)
     }
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        wanf::error_response(StatusCode::BAD_REQUEST, self.0.to_string())
+        wanf::error_response(self.status, self.error.to_string())
     }
 }
 
 fn api_error_from_git(error: GitHttpAppError) -> ApiError {
-    let message = match error {
-        GitHttpAppError::NotFound(message)
-        | GitHttpAppError::BadRequest(message)
-        | GitHttpAppError::Internal(message) => message,
-        GitHttpAppError::Unauthorized => "authentication required".to_owned(),
-    };
-    ApiError(anyhow::anyhow!(message))
+    match error {
+        GitHttpAppError::NotFound(message) => ApiError::not_found(anyhow::anyhow!(message)),
+        GitHttpAppError::BadRequest(message) => ApiError::bad_request(anyhow::anyhow!(message)),
+        GitHttpAppError::Internal(message) => ApiError::internal(anyhow::anyhow!(message)),
+        GitHttpAppError::Unauthorized => {
+            ApiError::unauthorized(anyhow::anyhow!("authentication required"))
+        }
+    }
 }
 
 fn timestamp_to_rfc3339(value: i64) -> String {

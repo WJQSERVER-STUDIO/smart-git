@@ -142,8 +142,10 @@ func syncRepoLocked(basedir string, userName string, repoName string, repoURL st
 		Bare:     true,
 	})
 	if err != nil {
-		_ = DeleteRepoData(userName, repoName)
-		_ = os.RemoveAll(localPath)
+		cleanupErr := cleanupFailedClone(userName, repoName, localPath)
+		if cleanupErr != nil {
+			return errors.Join(err, cleanupErr)
+		}
 		logError("克隆仓库 '%s' 失败: %v\n", repoURL, err)
 		return err
 	}
@@ -162,13 +164,19 @@ func refreshExistingRepo(localPath string, repoURL string, userName string, repo
 
 	repo, err := git.PlainOpen(localPath)
 	if err != nil {
-		_ = DeleteRepoData(repoData.RepoUser, repoData.RepoName)
+		cleanupErr := DeleteRepoData(repoData.RepoUser, repoData.RepoName)
+		if cleanupErr != nil {
+			return errors.Join(err, cleanupErr)
+		}
 		return err
 	}
 
 	remote, err := repo.Remote("origin")
 	if err != nil {
-		_ = DeleteRepoData(repoData.RepoUser, repoData.RepoName)
+		cleanupErr := DeleteRepoData(repoData.RepoUser, repoData.RepoName)
+		if cleanupErr != nil {
+			return errors.Join(err, cleanupErr)
+		}
 		return err
 	}
 
@@ -183,14 +191,20 @@ func refreshExistingRepo(localPath string, repoURL string, userName string, repo
 		Force:    true,
 	})
 	if fetchErr != nil && !errors.Is(fetchErr, git.NoErrAlreadyUpToDate) {
-		_ = restoreSyncedRepoData(repoData, cfg.Cache.ExpireEx)
+		restoreErr := restoreSyncedRepoData(repoData, cfg.Cache.ExpireEx)
+		if restoreErr != nil {
+			return errors.Join(fetchErr, restoreErr)
+		}
 		logError("fetch 仓库 '%s' 失败: %v\n", repoURL, fetchErr)
 		return fetchErr
 	}
 
 	localHeadHash, err := LocalHeadHash(localPath)
 	if err != nil {
-		_ = restoreSyncedRepoData(repoData, cfg.Cache.ExpireEx)
+		restoreErr := restoreSyncedRepoData(repoData, cfg.Cache.ExpireEx)
+		if restoreErr != nil {
+			return errors.Join(err, restoreErr)
+		}
 		return err
 	}
 
@@ -250,6 +264,17 @@ func restoreSyncedRepoData(repoData *schema.RepoData, expire time.Duration) erro
 		return nil
 	}
 	return SaveSyncedRepoData(repoData.RepoURL, repoData.RepoUser, repoData.RepoName, repoData.LocalPath, repoData.RepoCommitHash, expire)
+}
+
+func cleanupFailedClone(repoUser, repoName, localPath string) error {
+	var cleanupErr error
+	if err := DeleteRepoData(repoUser, repoName); err != nil {
+		cleanupErr = err
+	}
+	if err := os.RemoveAll(localPath); err != nil {
+		cleanupErr = errors.Join(cleanupErr, err)
+	}
+	return cleanupErr
 }
 
 func acquireRepoLock(key string) *repoLockEntry {
