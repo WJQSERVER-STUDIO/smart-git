@@ -2,17 +2,18 @@ package gitc
 
 import (
 	"errors"
-	"fmt"
 	"os"
+	"path/filepath"
+	"sync"
 	"time"
 
 	"smart-git/config"
+	"smart-git/database/schema"
 
 	"github.com/WJQSERVER-STUDIO/logger"
-	"github.com/go-git/go-git/v5"
-	gconfig "github.com/go-git/go-git/v5/config"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/storage/memory"
+	"github.com/go-git/go-git/v6"
+	gconfig "github.com/go-git/go-git/v6/config"
+	"github.com/go-git/go-git/v6/plumbing"
 )
 
 var (
@@ -22,218 +23,256 @@ var (
 	logInfo    = logger.LogInfo
 	logWarning = logger.LogWarning
 	logError   = logger.LogError
+
+	repoLocksMu sync.Mutex
+	repoLocks   = map[string]*repoLockEntry{}
 )
 
-func CloneRepo(dir string, userName string, repoName string, repoUrl string, cfg *config.Config) error {
-	repoPath := dir
+type repoLockEntry struct {
+	mu   sync.Mutex
+	refs int
+}
 
-	// 预检测文件夹问题: 检查目录是否已经存在
-	_, err := os.Stat(repoPath)
-	if err == nil { // 目录存在
-		// 检查它是否是一个 git 仓库
-		_, err = git.PlainOpen(repoPath)
-		if err != nil {
-			// 目录存在，但不是一个有效的 git 仓库
-			logError("目录 '%s' 存在，但不是一个有效的 git 仓库。移除并重新克隆。\n", repoPath)
-			err = os.RemoveAll(repoPath)
-			if err != nil {
-				logError("移除无效仓库目录失败: %v\n", err)
-				return err
-			}
-			// 继续克隆
-		} else {
-			// 目录存在，并且是一个 git 仓库
-			// 判断是否过期
-			var (
-				expireTime time.Time
-				headHash   string
-				err        error
-			)
+func EnsureRepoReady(basedir string, userName string, repoName string, repoURL string, cfg *config.Config) error {
+	lockKey := userName + "/" + repoName
+	lock := acquireRepoLock(lockKey)
+	defer releaseRepoLock(lockKey, lock)
 
-			expireTime, headHash, err = GetRepoExpireInfo(userName, repoName)
-			if err != nil {
-				logError("获取仓库过期时间失败: %v\n", err)
-				return err
-			}
-			if expireTime.Before(time.Now()) {
-				// 过期
+	return syncRepoLocked(basedir, userName, repoName, repoURL, cfg)
+}
 
-				// 检测hash 若一致则证明无需重新拉取
-				remoteHeadHash, err := GetRemoteHeadHash(repoUrl)
-				if err != nil {
-					logError("获取远程仓库 HEAD 失败: %v\n", err)
-					return err
-				}
-				if remoteHeadHash == headHash {
-					logInfo("仓库 '%s' 已经存在, 超过过期时间, 但 hash 是最新的。\n", repoPath)
-					// 写入 db
-					err = UpdateRepoData(repoUrl, userName, repoName, cfg.Cache.ExpireEx)
-					if err != nil {
-						logError("保存仓库数据失败: %v\n", err)
-						return err
-					}
-					return nil // 仓库未过期，直接使用
-				}
-				logInfo("仓库 '%s' 已过期。移除并重新克隆。\n", repoPath)
-				err = os.RemoveAll(repoPath)
-				if err != nil {
-					logError("移除过期仓库失败: %v\n", err)
-					return err
-				}
-				// 继续克隆
-			} else {
-				logInfo("仓库 '%s' 已经存在且是最新的。\n", repoPath)
-				return nil // 仓库未过期，直接使用
-			}
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		// os.Stat 错误，不是目录不存在
-		logError("检查目录 '%s' 时出错: %v\n", repoPath, err)
+func RecoverPendingRepos(cfg *config.Config) error {
+	records, err := GetAllRepoData()
+	if err != nil {
 		return err
 	}
-	// 如果目录不存在，或者因为过期或无效仓库而被移除，则克隆它
 
-	_, err = git.PlainClone(repoPath, true, &git.CloneOptions{
-		URL:      repoUrl,
+	for _, record := range records {
+		if record.Status != RepoStatusPending {
+			continue
+		}
+
+		if repoIsUsable(record.LocalPath) {
+			headHash, err := LocalHeadHash(record.LocalPath)
+			if err != nil {
+				logError("recover pending repo head failed: %v, repo: %s/%s\n", err, record.RepoUser, record.RepoName)
+				if err := removeRepoArtifacts(record); err != nil {
+					return err
+				}
+				continue
+			}
+
+			if err := SaveSyncedRepoData(record.RepoURL, record.RepoUser, record.RepoName, record.LocalPath, headHash, cfg.Cache.ExpireEx); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if err := removeRepoArtifacts(record); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func syncRepoLocked(basedir string, userName string, repoName string, repoURL string, cfg *config.Config) error {
+	localPath := filepath.Join(basedir, userName, repoName)
+	repoData, exists, err := GetRepoData(userName, repoName)
+	if err != nil {
+		return err
+	}
+
+	if exists && repoData.LocalPath == "" {
+		repoData.LocalPath = localPath
+	}
+
+	if exists && repoData.Status == RepoStatusPending {
+		if repoIsUsable(localPath) {
+			return finalizeSyncedRepo(localPath, repoURL, userName, repoName, cfg.Cache.ExpireEx)
+		}
+		if err := removeRepoArtifacts(*repoData); err != nil {
+			return err
+		}
+		repoData = nil
+		exists = false
+	}
+
+	if exists && repoIsUsable(localPath) {
+		if repoData.Status != RepoStatusSynced {
+			return finalizeSyncedRepo(localPath, repoURL, userName, repoName, cfg.Cache.ExpireEx)
+		}
+		if repoData.ExpireTime.After(time.Now()) {
+			logInfo("仓库 '%s' 已经存在且在有效期内。\n", localPath)
+			return nil
+		}
+		return refreshExistingRepo(localPath, repoURL, userName, repoName, cfg, repoData)
+	}
+
+	if !exists && repoIsUsable(localPath) {
+		logWarning("仓库 '%s' 存在但缺少元数据，自动修复记录。\n", localPath)
+		return finalizeSyncedRepo(localPath, repoURL, userName, repoName, cfg.Cache.ExpireEx)
+	}
+
+	if stat, statErr := os.Stat(localPath); statErr == nil && stat.IsDir() {
+		logWarning("仓库目录 '%s' 存在但不可用，准备重建。\n", localPath)
+		if err := os.RemoveAll(localPath); err != nil {
+			return err
+		}
+	}
+
+	if exists {
+		if err := DeleteRepoData(userName, repoName); err != nil {
+			return err
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
+		return err
+	}
+
+	if err := SavePendingRepoData(repoURL, userName, repoName, localPath); err != nil {
+		return err
+	}
+
+	_, err = git.PlainClone(localPath, &git.CloneOptions{
+		URL:      repoURL,
 		Progress: os.Stdout,
 		Mirror:   true,
+		Bare:     true,
 	})
 	if err != nil {
-		logError("克隆仓库 '%s' 失败: %v\n", repoUrl, err)
-		return err
-
-	} else {
-		err := AddCloneCount(userName, repoName)
-		if err != nil {
-			logError("增加克隆次数失败: %v\n", err)
-			return err
-		}
-	}
-
-	// 写入 db
-	err = SaveRepoData(repoUrl, userName, repoName, cfg.Cache.Expire)
-	if err != nil {
-		logError("保存仓库数据失败: %v\n", err)
+		_ = DeleteRepoData(userName, repoName)
+		_ = os.RemoveAll(localPath)
+		logError("克隆仓库 '%s' 失败: %v\n", repoURL, err)
 		return err
 	}
 
-	/*
-	   // 压缩
-	   go func() {
-	       err := CompressRepo(repoPath)
-	       if err != nil {
-	           logError("压缩失败: %v\n", err)
-	       } else {
-	           logInfo("压缩成功: %s.lz4\n", repoPath)
-	       }
-	   }()
-	*/
+	if err := AddCloneCount(userName, repoName); err != nil {
+		return err
+	}
 
-	return nil
+	return finalizeSyncedRepo(localPath, repoURL, userName, repoName, cfg.Cache.Expire)
 }
 
-// GetRemoteHeadHash 函数用于获取远程仓库 HEAD 指向的 commit hash
-func GetRemoteHeadHash(repoURL string) (string, error) {
-	// 创建一个远程仓库对象，使用内存存储
-	rem := git.NewRemote(memory.NewStorage(), &gconfig.RemoteConfig{
-		Name: "origin",
-		URLs: []string{repoURL},
+func refreshExistingRepo(localPath string, repoURL string, userName string, repoName string, cfg *config.Config, repoData *schema.RepoData) error {
+	if err := SavePendingRepoData(repoURL, userName, repoName, localPath); err != nil {
+		return err
+	}
+
+	repo, err := git.PlainOpen(localPath)
+	if err != nil {
+		_ = DeleteRepoData(repoData.RepoUser, repoData.RepoName)
+		return err
+	}
+
+	remote, err := repo.Remote("origin")
+	if err != nil {
+		_ = DeleteRepoData(repoData.RepoUser, repoData.RepoName)
+		return err
+	}
+
+	fetchErr := remote.Fetch(&git.FetchOptions{
+		RemoteName: "origin",
+		RefSpecs: []gconfig.RefSpec{
+			gconfig.RefSpec("+refs/*:refs/*"),
+		},
+		Prune:    true,
+		Progress: os.Stdout,
+		Tags:     plumbing.AllTags,
+		Force:    true,
 	})
+	if fetchErr != nil && !errors.Is(fetchErr, git.NoErrAlreadyUpToDate) {
+		_ = restoreSyncedRepoData(repoData, cfg.Cache.ExpireEx)
+		logError("fetch 仓库 '%s' 失败: %v\n", repoURL, fetchErr)
+		return fetchErr
+	}
 
-	// 获取远程仓库的 HEAD 引用
-	ref, err := rem.List(&git.ListOptions{})
+	localHeadHash, err := LocalHeadHash(localPath)
 	if err != nil {
-		return "", fmt.Errorf("获取远程仓库引用列表失败: %w", err)
+		_ = restoreSyncedRepoData(repoData, cfg.Cache.ExpireEx)
+		return err
 	}
 
-	var mainRef string
-	// 遍历引用列表，查找 HEAD 引用
-	for _, reference := range ref {
-		if reference.Name() == plumbing.HEAD {
-			mainRef = reference.Target().String()
-			break
-		}
+	if errors.Is(fetchErr, git.NoErrAlreadyUpToDate) || localHeadHash == repoData.RepoCommitHash {
+		logInfo("仓库 '%s' 经过 fetch 检查后仍是最新。\n", localPath)
+		return ExtendRepoExpire(repoData, cfg.Cache.ExpireEx)
 	}
 
-	// 查找mainRef对应的hash
-	for _, reference := range ref {
-		if reference.Name().String() == mainRef {
-			logDebug("Main ref: %s, hash: %s, target: %s", reference.Name(), reference.Hash(), reference.Target())
-			return reference.Hash().String(), nil
-		}
-	}
-
-	// 如果没有找到 HEAD 引用，返回错误
-	return "", fmt.Errorf("未找到远程仓库 HEAD 引用")
+	return finalizeSyncedRepo(localPath, repoURL, userName, repoName, cfg.Cache.Expire)
 }
 
-/*
-// CompressRepo 将指定的仓库压缩成 LZ4 格式的压缩包
-func CompressRepo(repoPath string) error {
-	lz4File, err := os.Create(repoPath + ".lz4")
+func finalizeSyncedRepo(localPath string, repoURL string, userName string, repoName string, expire time.Duration) error {
+	headHash, err := LocalHeadHash(localPath)
 	if err != nil {
-		return fmt.Errorf("failed to create LZ4 file: %w", err)
+		return err
 	}
-	defer lz4File.Close()
+	return SaveSyncedRepoData(repoURL, userName, repoName, localPath, headHash, expire)
+}
 
-	// 创建 LZ4 编码器
-	lz4Writer := lz4.NewWriter(lz4File)
-	defer lz4Writer.Close()
+func LocalHeadHash(repoPath string) (string, error) {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return "", err
+	}
+	head, err := repo.Head()
+	if err != nil {
+		return "", err
+	}
+	return head.Hash().String(), nil
+}
 
-	// 创建 tar.Writer
-	tarBuffer := new(bytes.Buffer)
-	tarWriter := tar.NewWriter(tarBuffer)
+func repoIsUsable(repoPath string) bool {
+	if repoPath == "" {
+		return false
+	}
+	if _, err := os.Stat(repoPath); err != nil {
+		return false
+	}
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return false
+	}
+	return repo.Storer != nil
+}
 
-	// 遍历仓库目录并打包
-	err = filepath.Walk(repoPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
+func removeRepoArtifacts(repoData schema.RepoData) error {
+	if repoData.LocalPath != "" {
+		if err := os.RemoveAll(repoData.LocalPath); err != nil {
 			return err
 		}
+	}
+	return DeleteRepoData(repoData.RepoUser, repoData.RepoName)
+}
 
-		// 创建 tar 文件头
-		header, err := tar.FileInfoHeader(info, "")
-		if err != nil {
-			return err
-		}
-		header.Name, err = filepath.Rel(repoPath, path)
-		if err != nil {
-			return err
-		}
-
-		// 写入 tar 文件头
-		if err := tarWriter.WriteHeader(header); err != nil {
-			return err
-		}
-
-		// 如果是文件，写入文件内容
-		if !info.IsDir() {
-			file, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer file.Close()
-
-			_, err = io.Copy(tarWriter, file)
-			if err != nil {
-				return err
-			}
-		}
+func restoreSyncedRepoData(repoData *schema.RepoData, expire time.Duration) error {
+	if repoData == nil {
 		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to walk through repo directory: %w", err)
 	}
-
-	// 关闭 tar.Writer
-	if err := tarWriter.Close(); err != nil {
-		return fmt.Errorf("failed to close tar writer: %w", err)
-	}
-
-	// 将 tar 数据写入 LZ4 压缩包
-	if _, err := lz4Writer.Write(tarBuffer.Bytes()); err != nil {
-		return fmt.Errorf("failed to write to LZ4 file: %w", err)
-	}
-
-	return nil
+	return SaveSyncedRepoData(repoData.RepoURL, repoData.RepoUser, repoData.RepoName, repoData.LocalPath, repoData.RepoCommitHash, expire)
 }
-*/
+
+func acquireRepoLock(key string) *repoLockEntry {
+	repoLocksMu.Lock()
+	entry, ok := repoLocks[key]
+	if !ok {
+		entry = &repoLockEntry{}
+		repoLocks[key] = entry
+	}
+	entry.refs++
+	repoLocksMu.Unlock()
+
+	entry.mu.Lock()
+	return entry
+}
+
+func releaseRepoLock(key string, entry *repoLockEntry) {
+	entry.mu.Unlock()
+
+	repoLocksMu.Lock()
+	entry.refs--
+	if entry.refs == 0 {
+		delete(repoLocks, key)
+	}
+	repoLocksMu.Unlock()
+}

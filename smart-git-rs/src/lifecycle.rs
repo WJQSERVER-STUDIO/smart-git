@@ -5,8 +5,8 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use git_server_core::discovery::RepoInfo;
-use git_server_http::{SharedState as GitHttpState, error::AppError};
+use gitserver_core::{discovery::RepoInfo, error::Error as GitServerError};
+use gitserver_http::{SharedState as GitHttpState, error::AppError};
 use tokio::sync::Mutex as AsyncMutex;
 
 use crate::{db::Database, git::MirrorService, model::RepoCacheRecord, repo_id::RepoId};
@@ -101,6 +101,25 @@ impl RepositoryLifecycleManager {
         Ok(())
     }
 
+    pub async fn recover_registered_repos(&self) -> anyhow::Result<()> {
+        let synced = self.db.list_synced_records()?;
+        for record in synced {
+            if !local_repo_is_usable(&record.local_path) {
+                continue;
+            }
+
+            let repo_info = repo_info_from_record(&record);
+            match self.git_http_state.register_repo(repo_info) {
+                Ok(()) => {}
+                Err(GitServerError::Protocol(message))
+                    if message.starts_with("repository already registered:") => {}
+                Err(error) => return Err(anyhow::anyhow!(error.to_string())),
+            }
+        }
+
+        Ok(())
+    }
+
     async fn sync_with_policy(
         &self,
         repo_id: &RepoId,
@@ -110,11 +129,19 @@ impl RepositoryLifecycleManager {
         let repo_lock = self.repo_lock(repo_id);
         let _guard = repo_lock.lock().await;
 
-        let cached = self.db.get_cache_record(repo_id).map_err(to_internal)?;
+        let cached = self
+            .repair_missing_record(repo_id)
+            .map_err(to_internal)?
+            .or(self.db.get_cache_record(repo_id).map_err(to_internal)?);
         let should_refresh = self.should_refresh(cached.as_ref(), refresh_policy)?;
 
         if should_refresh {
-            let pending = pending_record(repo_id, cached.as_ref(), self.mirror_service.as_ref())
+            let pending = pending_record(
+                repo_id,
+                cached.as_ref(),
+                self.mirror_service.as_ref(),
+                self.refresh_ttl,
+            )
                 .map_err(to_internal)?;
             self.db
                 .apply_lifecycle_update(repo_id, Some(&pending), false, false)
@@ -127,6 +154,7 @@ impl RepositoryLifecycleManager {
             None
         };
         let fresh_clone = outcome.as_ref().is_some_and(|outcome| outcome.fresh_clone);
+        let cached_created_at = cached.as_ref().map(|record| record.created_at);
 
         let record = match (cached, outcome) {
             (Some(record), None) => record,
@@ -136,7 +164,9 @@ impl RepositoryLifecycleManager {
                 upstream_url: outcome.upstream_url,
                 local_path: outcome.local_path.display().to_string(),
                 head_oid: outcome.head_oid,
+                created_at: cached_created_at.unwrap_or(unix_timestamp().map_err(to_internal)?),
                 updated_at: unix_timestamp().map_err(to_internal)?,
+                expires_at: repo_expiry_timestamp(self.refresh_ttl).map_err(to_internal)?,
                 status: "synced".to_owned(),
             },
             (None, None) => {
@@ -158,7 +188,7 @@ impl RepositoryLifecycleManager {
         let repo_info = repo_info_from_record(&record);
         match self.git_http_state.register_repo(repo_info.clone()) {
             Ok(()) => {}
-            Err(git_server_core::error::Error::Protocol(message))
+            Err(GitServerError::Protocol(message))
                 if message.starts_with("repository already registered:") => {}
             Err(error) => return Err(error.into()),
         }
@@ -210,6 +240,30 @@ impl RepositoryLifecycleManager {
         let lock = Arc::new(AsyncMutex::new(()));
         repo_locks.insert(key, Arc::downgrade(&lock));
         lock
+    }
+
+    fn repair_missing_record(&self, repo_id: &RepoId) -> anyhow::Result<Option<RepoCacheRecord>> {
+        let local_path = self.mirror_service.local_path(repo_id);
+        if !local_repo_is_usable(&local_path.display().to_string()) {
+            return Ok(None);
+        }
+
+        let record = RepoCacheRecord {
+            owner: repo_id.owner().to_owned(),
+            name: repo_id.name().to_owned(),
+            upstream_url: self.mirror_service.upstream_url(repo_id),
+            local_path: local_path.display().to_string(),
+            head_oid: local_repo_head_oid(&local_path),
+            created_at: unix_timestamp()?,
+            updated_at: unix_timestamp()?,
+            expires_at: repo_expiry_timestamp(self.refresh_ttl)?,
+            status: "synced".to_owned(),
+        };
+
+        self.db
+            .apply_lifecycle_update(repo_id, Some(&record), false, false)?;
+
+        Ok(Some(record))
     }
 }
 
@@ -275,6 +329,7 @@ fn pending_record(
     repo_id: &RepoId,
     cached: Option<&RepoCacheRecord>,
     mirror_service: &MirrorService,
+    refresh_ttl: Duration,
 ) -> anyhow::Result<RepoCacheRecord> {
     let updated_at = unix_timestamp()?;
 
@@ -285,7 +340,9 @@ fn pending_record(
             upstream_url: record.upstream_url.clone(),
             local_path: record.local_path.clone(),
             head_oid: record.head_oid.clone(),
+            created_at: record.created_at,
             updated_at,
+            expires_at: record.expires_at,
             status: "pending".to_owned(),
         },
         None => RepoCacheRecord {
@@ -294,10 +351,16 @@ fn pending_record(
             upstream_url: mirror_service.upstream_url(repo_id),
             local_path: mirror_service.local_path(repo_id).display().to_string(),
             head_oid: None,
+            created_at: updated_at,
             updated_at,
+            expires_at: repo_expiry_timestamp(refresh_ttl)?,
             status: "pending".to_owned(),
         },
     })
+}
+
+fn repo_expiry_timestamp(refresh_ttl: Duration) -> anyhow::Result<i64> {
+    Ok(unix_timestamp()? + refresh_ttl.as_secs() as i64)
 }
 
 fn unix_timestamp() -> anyhow::Result<i64> {

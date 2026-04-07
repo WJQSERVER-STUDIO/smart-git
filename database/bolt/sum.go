@@ -2,7 +2,7 @@ package bolt
 
 //存入条目
 import (
-	"encoding/json"
+	"bytes"
 	"fmt"
 	"smart-git/database/schema"
 
@@ -16,8 +16,8 @@ func (s *Storage) SaveSumData(data *schema.RepoSumData) error {
 		// 使用数据制作key
 		key := data.RepoUser + "/" + data.RepoName
 
-		// 序列化为 JSON 格式
-		dataBytes, err := json.Marshal(data)
+		var buf bytes.Buffer
+		err := encodeRepoSumData(&buf, data)
 		if err != nil {
 			return err
 		}
@@ -29,7 +29,7 @@ func (s *Storage) SaveSumData(data *schema.RepoSumData) error {
 		}
 
 		// 根据 UUID 存储数据
-		return bucket.Put([]byte(key), dataBytes)
+		return bucket.Put([]byte(key), buf.Bytes())
 	})
 }
 
@@ -51,8 +51,8 @@ func (s *Storage) GetSumData(repoUser string, repoName string) (*schema.RepoSumD
 		}
 
 		// 反序列化 JSON 数据
-		if err := json.Unmarshal(dataBytes, &repoSumData); err != nil {
-			return fmt.Errorf("JSON 反序列化失败: %w", err)
+		if err := decodeRepoSumData(bytes.NewReader(dataBytes), &repoSumData); err != nil {
+			return fmt.Errorf("RepoSumData gob 反序列化失败: %w", err)
 		}
 
 		found = true
@@ -88,7 +88,7 @@ func (s *Storage) GetAllSumData() ([]schema.RepoSumData, error) {
 		cursor := bucket.Cursor()
 		for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
 			var record schema.RepoSumData
-			if err := json.Unmarshal(value, &record); err != nil {
+			if err := decodeRepoSumData(bytes.NewReader(value), &record); err != nil {
 				return err
 			}
 			records = append(records, record)

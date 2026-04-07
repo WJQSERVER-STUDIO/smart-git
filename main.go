@@ -5,15 +5,17 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"smart-git/config"
 	"smart-git/database"
+	"smart-git/gitc"
 
 	"github.com/WJQSERVER-STUDIO/logger"
 )
 
 var (
-	cfgfile string = "./config/config.toml"
+	cfgfile string = "./config/config"
 	cfg     *config.Config
 )
 
@@ -27,8 +29,13 @@ var (
 )
 
 func ReadFlag() {
-	cfgfilePtr := flag.String("cfg", "./config/config.toml", "config file path")
+	cfgfilePtr := flag.String("c", "./config/config", "config file path")
+	cfgfileCompatPtr := flag.String("cfg", "", "config file path (compat alias)")
 	flag.Parse()
+	if *cfgfileCompatPtr != "" {
+		cfgfile = *cfgfileCompatPtr
+		return
+	}
 	cfgfile = *cfgfilePtr
 }
 
@@ -62,6 +69,22 @@ func init() {
 		return
 	}
 
+	if cfg.Log.LogFilePath != "" {
+		err = os.MkdirAll(filepath.Dir(cfg.Log.LogFilePath), 0755)
+		if err != nil {
+			fmt.Printf("Fail to create log dir: %v\n", err)
+			return
+		}
+	}
+
+	if cfg.Database.Path != "" {
+		err = os.MkdirAll(filepath.Dir(cfg.Database.Path), 0755)
+		if err != nil {
+			fmt.Printf("Fail to create db dir: %v\n", err)
+			return
+		}
+	}
+
 	err = logger.Init(cfg.Log.LogFilePath, cfg.Log.MaxLogSize)
 	if err != nil {
 		fmt.Printf("Fail to init logger: %v\n", err)
@@ -72,6 +95,10 @@ func init() {
 	}
 
 	database.SetDBInfo(cfg)
+	if err := gitc.RecoverPendingRepos(cfg); err != nil {
+		fmt.Printf("Fail to recover pending repos: %v\n", err)
+		return
+	}
 }
 
 func main() {

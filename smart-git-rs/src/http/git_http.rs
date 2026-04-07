@@ -4,7 +4,7 @@ use axum::{
     http::HeaderMap,
     response::Response,
 };
-use git_server_http::{
+use gitserver_http::{
     error::AppError,
     handlers::{self, ServiceKind},
 };

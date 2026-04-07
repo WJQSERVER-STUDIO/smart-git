@@ -1,35 +1,64 @@
 use axum::{
-    Json,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use serde_json::json;
 
 use crate::{
     app::AppState,
-    model::{HealthResponse, RepoCacheRecord, SyncResponse},
+    model::{ApiHealthResponse, ApiRepoRecord, ApiRepoStats, ApiSyncResponse},
     repo_id::RepoId,
 };
 
-pub async fn healthz(State(state): State<AppState>) -> Json<HealthResponse> {
-    Json(HealthResponse {
-        status: "ok",
-        repo_dir: state.config.cache.repo_dir.display().to_string(),
-        database_path: state.config.database.path.display().to_string(),
-        github_base: state.config.upstream.github_base.clone(),
-    })
+use gitserver_http::error::AppError as GitHttpAppError;
+
+use super::wanf;
+
+pub async fn healthz(State(state): State<AppState>) -> Response {
+    wanf::health_response(
+        StatusCode::OK,
+        &ApiHealthResponse {
+            status: "ok".to_owned(),
+            repo_dir: state.config.cache.repo_dir.display().to_string(),
+            database_path: state.config.database.path.display().to_string(),
+            github_base: state.config.upstream.github_base.clone(),
+        },
+    )
 }
 
-pub async fn list_cache_records(
-    State(state): State<AppState>,
-) -> ApiResult<Json<Vec<RepoCacheRecord>>> {
-    Ok(Json(state.db.list_cache_records()?))
+pub async fn list_cache_records(State(state): State<AppState>) -> ApiResult<Response> {
+    let records = state
+        .db
+        .list_cache_records()?
+        .into_iter()
+        .map(|record| ApiRepoRecord {
+            owner: record.owner,
+            name: record.name,
+            upstream_url: record.upstream_url,
+            local_path: record.local_path,
+            head_oid: record.head_oid,
+            status: record.status,
+            created_at: timestamp_to_rfc3339(record.created_at),
+            updated_at: timestamp_to_rfc3339(record.updated_at),
+            expires_at: timestamp_to_rfc3339(record.expires_at),
+        })
+        .collect::<Vec<_>>();
+    Ok(wanf::repo_records_response(StatusCode::OK, &records))
 }
 
 pub async fn list_repo_stats(State(state): State<AppState>) -> ApiResult<Response> {
-    let stats = state.db.list_stats()?;
-    Ok((StatusCode::OK, Json(stats)).into_response())
+    let stats = state
+        .db
+        .list_stats()?
+        .into_iter()
+        .map(|record| ApiRepoStats {
+            owner: record.owner,
+            name: record.name,
+            clone_count: record.clone_count,
+            request_count: record.request_count,
+        })
+        .collect::<Vec<_>>();
+    Ok(wanf::repo_stats_response(StatusCode::OK, &stats))
 }
 
 pub async fn sync_repo(
@@ -49,19 +78,19 @@ pub async fn sync_repo(
         StatusCode::OK
     };
 
-    Ok((
+    Ok(wanf::sync_response(
         status,
-        Json(SyncResponse {
+        &ApiSyncResponse {
             owner: repo_id.owner().to_owned(),
             name: repo_id.name().to_owned(),
             upstream_url: synced.record.upstream_url,
             local_path: synced.record.local_path,
             head_oid: synced.record.head_oid,
+            status: synced.record.status,
             fresh_clone: synced.fresh_clone,
             refreshed: synced.refreshed,
-        }),
-    )
-        .into_response())
+        },
+    ))
 }
 
 type ApiResult<T> = Result<T, ApiError>;
@@ -79,22 +108,30 @@ where
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "error": self.0.to_string(),
-            })),
-        )
-            .into_response()
+        wanf::error_response(StatusCode::BAD_REQUEST, self.0.to_string())
     }
 }
 
-fn api_error_from_git(error: git_server_http::error::AppError) -> ApiError {
+fn api_error_from_git(error: GitHttpAppError) -> ApiError {
     let message = match error {
-        git_server_http::error::AppError::NotFound(message)
-        | git_server_http::error::AppError::BadRequest(message)
-        | git_server_http::error::AppError::Internal(message) => message,
-        git_server_http::error::AppError::Unauthorized => "authentication required".to_owned(),
+        GitHttpAppError::NotFound(message)
+        | GitHttpAppError::BadRequest(message)
+        | GitHttpAppError::Internal(message) => message,
+        GitHttpAppError::Unauthorized => "authentication required".to_owned(),
     };
     ApiError(anyhow::anyhow!(message))
+}
+
+fn timestamp_to_rfc3339(value: i64) -> String {
+    if value <= 0 {
+        return String::new();
+    }
+
+    use std::time::{Duration, UNIX_EPOCH};
+
+    let time = UNIX_EPOCH + Duration::from_secs(value as u64);
+    let datetime = time::OffsetDateTime::from(time);
+    datetime
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_default()
 }

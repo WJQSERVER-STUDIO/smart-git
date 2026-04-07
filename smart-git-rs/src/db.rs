@@ -36,7 +36,9 @@ impl Database {
                 upstream_url TEXT NOT NULL,
                 local_path TEXT NOT NULL,
                 head_oid TEXT,
+                created_at INTEGER NOT NULL DEFAULT 0,
                 updated_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL DEFAULT 0,
                 status TEXT NOT NULL DEFAULT 'synced',
                 PRIMARY KEY (owner, name)
             );
@@ -54,6 +56,16 @@ impl Database {
 
         conn.execute(
             "ALTER TABLE repo_cache ADD COLUMN status TEXT NOT NULL DEFAULT 'synced'",
+            [],
+        )
+        .ok();
+        conn.execute(
+            "ALTER TABLE repo_cache ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0",
+            [],
+        )
+        .ok();
+        conn.execute(
+            "ALTER TABLE repo_cache ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0",
             [],
         )
         .ok();
@@ -76,13 +88,15 @@ impl Database {
         if let Some(record) = cache_record {
             tx.execute(
                 r#"
-                INSERT INTO repo_cache (owner, name, upstream_url, local_path, head_oid, updated_at, status)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                INSERT INTO repo_cache (owner, name, upstream_url, local_path, head_oid, created_at, updated_at, expires_at, status)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
                 ON CONFLICT(owner, name) DO UPDATE SET
                     upstream_url = excluded.upstream_url,
                     local_path = excluded.local_path,
                     head_oid = excluded.head_oid,
+                    created_at = excluded.created_at,
                     updated_at = excluded.updated_at,
+                    expires_at = excluded.expires_at,
                     status = excluded.status
                 "#,
                 params![
@@ -91,7 +105,9 @@ impl Database {
                     &record.upstream_url,
                     &record.local_path,
                     &record.head_oid,
+                    record.created_at,
                     record.updated_at,
+                    record.expires_at,
                     &record.status,
                 ],
             )
@@ -136,7 +152,7 @@ impl Database {
         let mut statement = conn
             .prepare(
                 r#"
-                SELECT owner, name, upstream_url, local_path, head_oid, updated_at, status
+                SELECT owner, name, upstream_url, local_path, head_oid, created_at, updated_at, expires_at, status
                 FROM repo_cache
                 ORDER BY owner, name
                 "#,
@@ -151,8 +167,10 @@ impl Database {
                     upstream_url: row.get(2)?,
                     local_path: row.get(3)?,
                     head_oid: row.get(4)?,
-                    updated_at: row.get(5)?,
-                    status: row.get(6)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                    expires_at: row.get(7)?,
+                    status: row.get(8)?,
                 })
             })
             .context("failed to query cache records")?;
@@ -170,7 +188,7 @@ impl Database {
         let mut statement = conn
             .prepare(
                 r#"
-                SELECT owner, name, upstream_url, local_path, head_oid, updated_at, status
+                SELECT owner, name, upstream_url, local_path, head_oid, created_at, updated_at, expires_at, status
                 FROM repo_cache
                 WHERE owner = ?1 AND name = ?2
                 "#,
@@ -194,8 +212,10 @@ impl Database {
             upstream_url: row.get(2)?,
             local_path: row.get(3)?,
             head_oid: row.get(4)?,
-            updated_at: row.get(5)?,
-            status: row.get(6)?,
+            created_at: row.get(5)?,
+            updated_at: row.get(6)?,
+            expires_at: row.get(7)?,
+            status: row.get(8)?,
         }))
     }
 
@@ -207,7 +227,7 @@ impl Database {
         let mut statement = conn
             .prepare(
                 r#"
-                SELECT owner, name, upstream_url, local_path, head_oid, updated_at, status
+                SELECT owner, name, upstream_url, local_path, head_oid, created_at, updated_at, expires_at, status
                 FROM repo_cache
                 WHERE updated_at <= ?1
                 ORDER BY updated_at ASC, owner ASC, name ASC
@@ -223,8 +243,10 @@ impl Database {
                     upstream_url: row.get(2)?,
                     local_path: row.get(3)?,
                     head_oid: row.get(4)?,
-                    updated_at: row.get(5)?,
-                    status: row.get(6)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                    expires_at: row.get(7)?,
+                    status: row.get(8)?,
                 })
             })
             .context("failed to query stale cache records")?;
@@ -242,7 +264,7 @@ impl Database {
         let mut statement = conn
             .prepare(
                 r#"
-                SELECT owner, name, upstream_url, local_path, head_oid, updated_at, status
+                SELECT owner, name, upstream_url, local_path, head_oid, created_at, updated_at, expires_at, status
                 FROM repo_cache
                 WHERE status = 'pending'
                 ORDER BY updated_at ASC, owner ASC, name ASC
@@ -258,8 +280,10 @@ impl Database {
                     upstream_url: row.get(2)?,
                     local_path: row.get(3)?,
                     head_oid: row.get(4)?,
-                    updated_at: row.get(5)?,
-                    status: row.get(6)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                    expires_at: row.get(7)?,
+                    status: row.get(8)?,
                 })
             })
             .context("failed to query pending cache records")?;
@@ -267,6 +291,43 @@ impl Database {
         let mut records = Vec::new();
         for row in rows {
             records.push(row.context("failed to decode pending cache record")?);
+        }
+
+        Ok(records)
+    }
+
+    pub fn list_synced_records(&self) -> anyhow::Result<Vec<RepoCacheRecord>> {
+        let conn = self.conn()?;
+        let mut statement = conn
+            .prepare(
+                r#"
+                SELECT owner, name, upstream_url, local_path, head_oid, created_at, updated_at, expires_at, status
+                FROM repo_cache
+                WHERE status = 'synced'
+                ORDER BY owner, name
+                "#,
+            )
+            .context("failed to prepare synced cache query")?;
+
+        let rows = statement
+            .query_map([], |row| {
+                Ok(RepoCacheRecord {
+                    owner: row.get(0)?,
+                    name: row.get(1)?,
+                    upstream_url: row.get(2)?,
+                    local_path: row.get(3)?,
+                    head_oid: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                    expires_at: row.get(7)?,
+                    status: row.get(8)?,
+                })
+            })
+            .context("failed to query synced cache records")?;
+
+        let mut records = Vec::new();
+        for row in rows {
+            records.push(row.context("failed to decode synced cache record")?);
         }
 
         Ok(records)

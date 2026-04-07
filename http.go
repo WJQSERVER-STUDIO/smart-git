@@ -3,30 +3,13 @@ package main
 // MIT https://github.com/erred/gitreposerver
 
 import (
-	"bytes"
-	"compress/gzip"
-	"context"
-	"errors"
-	"io"
 	"log"
 	"net/http"
 	"smart-git/database"
-	"smart-git/gitc"
-	"smart-git/middleware/loggin"
 
-	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/cloudwego/hertz/pkg/app/server"
-
-	//"github.com/cloudwego/hertz/pkg/network/standard"
-	"github.com/go-git/go-billy/v5/osfs"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/format/pktline"
-	"github.com/go-git/go-git/v5/plumbing/protocol/packp"
-	"github.com/go-git/go-git/v5/plumbing/transport"
-	gitserver "github.com/go-git/go-git/v5/plumbing/transport/server"
-
-	rgzip "github.com/hertz-contrib/gzip"
-	"github.com/hertz-contrib/http2/factory"
+	"github.com/fenthope/compress"
+	"github.com/fenthope/record"
+	"github.com/infinite-iroha/touka"
 )
 
 // RunHTTP 函数启动 HTTP 服务器，处理 Git 仓库的 upload-pack 服务。
@@ -40,164 +23,73 @@ import (
 func RunHTTP(addr string, baseRepoDir string) error {
 	logInfo("Starting HTTP server on addr '%s'\n", addr)
 
-	r := server.New(
-		server.WithHostPorts(addr),
-		server.WithH2C(true),
-		//server.WithALPN(true),
-		//server.WithTransport(standard.NewTransporter),
-	)
-
-	r.AddProtocol("h2", factory.NewServerFactory())
+	r := touka.Default()
+	r.SetProtocols(&touka.ProtocolsConfig{
+		Http1:           true,
+		Http2_Cleartext: true,
+	})
 
 	// 添加中间件
-	r.Use(rgzip.Gzip(rgzip.DefaultCompression))
+	r.Use(record.Middleware())
 
-	r.Use(loggin.Middleware()) //  适配 loggin 中间件
+	r.Use(compress.Compression(compress.DefaultCompressionConfig()))
 
-	r.GET("/:user/:repo/info/refs", func(ctx context.Context, c *app.RequestContext) {
-		httpInfoRefs(ctx, c, baseRepoDir)
-	}) // 处理仓库引用信息请求
-	r.POST("/:user/:repo/git-upload-pack", func(ctx context.Context, c *app.RequestContext) {
-		httpGitUploadPack(ctx, c, baseRepoDir)
-	}) // 处理 git-upload-pack 请求
+	r.GET("/:user/:repo/info/refs", handleInfoRefs(baseRepoDir))    // 处理仓库引用信息请求
+	r.POST("/:user/:repo/git-upload-pack", serviceRPC(baseRepoDir)) // 处理 git-upload-pack 请求
+
+	r.GET("/healthz", func(c *touka.Context) {
+		RenderWANF(c, http.StatusOK, &APIHealthResponse{
+			Status:       "ok",
+			RepoDir:      cfg.Server.BaseDir,
+			DatabasePath: cfg.Database.Path,
+			GithubBase:   "https://github.com",
+		})
+	})
 
 	// info获取
-	r.GET("/api/db/data", func(ctx context.Context, c *app.RequestContext) {
+	r.GET("/api/db/data", func(c *touka.Context) {
 		allData, err := database.DB.GetAllData()
 		if err != nil {
-			c.Error(err)                             // 使用 Hertz 的 Error Handling
-			c.Status(http.StatusInternalServerError) // 发送 500 状态码
+			RenderWANFError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
-		c.JSON(http.StatusOK, allData) // 使用 Hertz 的 JSON 响应
+
+		resp := make([]APIRepoRecord, 0, len(allData))
+		for _, record := range allData {
+			resp = append(resp, NewAPIRepoRecord(record))
+		}
+		RenderWANF(c, http.StatusOK, &APIRepoRecordList{Items: resp})
 	})
-	r.GET("/api/db/sum", func(ctx context.Context, c *app.RequestContext) {
+	r.GET("/api/db/sum", func(c *touka.Context) {
 		allData, err := database.DB.GetAllSumData()
 		if err != nil {
-			c.Error(err)                             // 使用 Hertz 的 Error Handling
-			c.Status(http.StatusInternalServerError) // 发送 500 状态码
+			RenderWANFError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
-		c.JSON(http.StatusOK, allData) // 使用 Hertz 的 JSON 响应
+
+		resp := make([]APIRepoStats, 0, len(allData))
+		for _, record := range allData {
+			resp = append(resp, NewAPIRepoStats(record))
+		}
+		RenderWANF(c, http.StatusOK, &APIRepoStatsList{Items: resp})
 	})
 
 	// 404 路由处理
-	r.NoRoute(func(ctx context.Context, c *app.RequestContext) {
-		logInfo("404 Not Found, Path: %s", string(c.Path())) // 使用 rc.Path() 获取路径
-		c.Status(http.StatusNotFound)                        // 发送 404 状态码
+	r.NoRoute(func(c *touka.Context) {
+		logInfo("404 Not Found, Path: %s", string(c.GetRequestURIPath())) // 使用 rc.Path() 获取路径
+		c.Status(http.StatusNotFound)                                     // 发送 404 状态码
 	})
 
-	r.Spin()
+	err := r.Run(
+		touka.WithAddr(addr),
+		touka.WithGracefulShutdownDefault(),
+	)
+	if err != nil {
+		logError("Error starting HTTP server: %v\n", err)
+		return err
+	}
 	log.Println("HTTP server stopped")
 	return nil
-}
-
-// httpInfoRefs 函数处理 /info/refs 请求，用于服务发现和获取仓库引用信息。
-//
-// 该函数响应 Git 客户端的 info/refs 请求，用于客户端发现服务并获取仓库的引用信息（例如分支和标签）。
-// 如果仓库不存在，则会尝试从 GitHub 克隆仓库。
-//
-// 参数:
-//   - baseRepoDir: Git 仓库的基础目录。
-//
-// 返回值:
-func httpInfoRefs(ctx context.Context, c *app.RequestContext, baseRepoDir string) {
-
-	repoName := c.Param("repo") // 使用 rc.Param 获取路由参数
-	userName := c.Param("user") // 使用 rc.Param 获取路由参数
-
-	dir := baseRepoDir + "/" + userName + "/" + repoName
-
-	// 增加统计次数
-	err := AddRequestCount(userName, repoName)
-	if err != nil {
-		logError("增加请求次数失败: %v\n", err)
-		c.Error(err) // 使用 Hertz 的 Error Handling
-		c.Status(http.StatusInternalServerError)
-		return
-	}
-
-	gitUrl := "https://github.com/" + userName + "/" + repoName
-
-	err = gitc.CloneRepo(dir, userName, repoName, gitUrl, cfg)
-	if err != nil && err != plumbing.ErrReferenceNotFound {
-		logError("CloneRepo error: %v\n", err)
-		c.Error(err) // 使用 Hertz 的 Error Handling
-		return
-	} else if err == plumbing.ErrReferenceNotFound {
-		logError("Repo not found: %v\n", err)
-		c.Status(http.StatusNotFound) // 发送 404 状态码
-		return
-	}
-
-	if c.Query("service") != "git-upload-pack" {
-		logInfo("Full URI: %s", c.Request.URI().String())
-		c.String(http.StatusForbidden, "Invalid service, Only Smart HTTP")
-		logError("Invalid service, Only Smart HTTP")
-		return
-	}
-
-	c.SetContentType("application/x-git-upload-pack-advertisement") // 使用 rc.SetContentType 设置 Content-Type
-
-	ep, err := transport.NewEndpoint("/")
-	if err != nil {
-		logError("Error creating endpoint: %v, repo: %s\n", err, repoName)
-		c.Error(err) // 使用 Hertz 的 Error Handling
-		_, errResp := c.WriteString(err.Error())
-		if errResp != nil {
-			logError("WriteString error: %v\n", errResp)
-		}
-		c.Status(http.StatusInternalServerError)
-		return
-	}
-
-	bfs := osfs.New(dir)
-	ld := gitserver.NewFilesystemLoader(bfs)
-	svr := gitserver.NewServer(ld)
-	sess, err := svr.NewUploadPackSession(ep, nil)
-	if err != nil {
-		logError("Error creating upload pack session: %v, repo: %s\n", err, repoName)
-		c.Error(err) // 使用 Hertz 的 Error Handling
-		_, errResp := c.WriteString(err.Error())
-		if errResp != nil {
-			logError("WriteString error: %v\n", errResp)
-		}
-		c.Status(http.StatusInternalServerError)
-		return
-	}
-
-	ar, err := sess.AdvertisedReferencesContext(ctx) // 使用 context.Context
-	if err != nil {
-		_, errResp := c.WriteString(err.Error())
-		if errResp != nil {
-			logError("WriteString error: %v\n", errResp)
-		}
-		logError("Error getting advertised references: %v, repo: %s\n", err, repoName)
-		c.Status(http.StatusInternalServerError)
-		return
-	}
-
-	ar.Prefix = [][]byte{
-		[]byte("# service=git-upload-pack"),
-		pktline.Flush,
-	}
-
-	pr, pw := io.Pipe()
-	go func() {
-		defer pw.Close()
-		err = ar.Encode(pw)
-		if err != nil {
-			logError("Error encoding advertised references: %v, repo: %s\n", err, repoName)
-			_, errResp := c.WriteString(err.Error())
-			if errResp != nil {
-				logError("WriteString error: %v\n", errResp)
-			}
-			c.Status(http.StatusInternalServerError)
-			return
-		}
-	}()
-
-	c.SetBodyStream(pr, -1)
 }
 
 // httpGitUploadPack 函数处理 /git-upload-pack 请求，允许客户端推送代码到服务器。
@@ -210,7 +102,8 @@ func httpInfoRefs(ctx context.Context, c *app.RequestContext, baseRepoDir string
 //
 // 返回值:
 //   - app.Handler: Hertz 路由处理函数。
-func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir string) { // 使用 Hertz 的 Context 和 RequestContext
+/*
+func httpGitUploadPack(c *touka.Context, baseRepoDir string) { // 使用 Hertz 的 Context 和 RequestContext
 
 	repoName := c.Param("repo") // 使用 rc.Param 获取路由参数
 	if repoName == "" {
@@ -275,7 +168,7 @@ func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir s
 	}
 
 	bfs := osfs.New(dir)
-	ld := gitserver.NewFilesystemLoader(bfs)
+	ld := gitserver.NewFilesystemLoader(bfs, false)
 	svr := gitserver.NewServer(ld)
 	sess, err := svr.NewUploadPackSession(ep, nil)
 	if err != nil {
@@ -319,3 +212,4 @@ func httpGitUploadPack(ctx context.Context, c *app.RequestContext, baseRepoDir s
 
 	c.SetBodyStream(pr, -1)
 }
+*/

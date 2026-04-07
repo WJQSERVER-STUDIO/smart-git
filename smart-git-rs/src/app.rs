@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use git_server_core::discovery::DynamicRepoRegistry;
-use git_server_http::{AuthConfig, ServicePolicy, SharedState as GitHttpState};
+use gitserver_core::discovery::DynamicRepoRegistry;
+use gitserver_http::{AuthConfig, ServicePolicy, SharedState as GitHttpState};
 use tokio::net::TcpListener;
 use tokio::time::MissedTickBehavior;
 use tracing::info;
@@ -45,6 +45,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
         config.cache.refresh_ttl(),
     ));
     lifecycle.recover_pending().await?;
+    lifecycle.recover_registered_repos().await?;
 
     let state = AppState {
         config,

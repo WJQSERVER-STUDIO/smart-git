@@ -5,18 +5,19 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1"
-axum = { version = "0.8.4", features = ["macros"] }
-clap = { version = "4.5", features = ["derive"] }
-git-server-core = { path = "../../../WJQSERVER/git-server/crates/git-server-core" }
-git-server-http = { path = "../../../WJQSERVER/git-server/crates/git-server-http" }
-gix = { version = "0.80.0", features = ["blocking-network-client"] }
+axum = { version = "0.8.8", features = ["macros"] }
+clap = { version = "4.6.0", features = ["derive"] }
+gitserver-core = "0.0.1"
+gitserver-http = "0.0.1"
+gix = { version = "0.81.0", features = ["blocking-network-client"] }
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal"] }
-tokio-util = "0.7"
-toml = "0.8"
-tower = { version = "0.5", features = ["util"] }
+tokio = { version = "1.51.0", features = ["macros", "net", "rt-multi-thread", "signal"] }
+tokio-util = "0.7.18"
+time = { version = "0.3", features = ["formatting"] }
+toml = "1.1.2"
+tower = { version = "0.5.3", features = ["util"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-wanf-rs = { path = "../../../WJQSERVER/wanf-rs" }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+wanf = "0.0.1"

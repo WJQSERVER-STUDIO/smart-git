@@ -109,7 +109,7 @@ impl Config {
         };
 
         match path.extension().and_then(|ext| ext.to_str()) {
-            Some("wanf") => wanf_rs::decode_file(&path)
+            Some("wanf") => wanf::decode_file(&path)
                 .with_context(|| format!("failed to parse WANF config file {}", path.display())),
             _ => {
                 let raw = fs::read_to_string(&path)
