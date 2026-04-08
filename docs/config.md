@@ -44,7 +44,7 @@ logfilepath = "/data/smart-git/log/smart-git.log"
 maxlogsize = 5
 level = "info"
 
-[Database]
+[database]
 path = "/data/smart-git/db/smart-git.db"
 
 [cache]
