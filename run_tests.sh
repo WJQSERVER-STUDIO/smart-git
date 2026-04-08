@@ -19,14 +19,11 @@ echo ""
 
 echo "3. Running Rust tests..."
 echo "-------------------------------------------"
-cd smart-git-rs && cargo test 2>&1 | grep -E "(test |running |ok|FAILED)" || true
+cd smart-git-rs && cargo test 2>&1 | grep -E "(test |running |ok|FAILED)"
 cd ..
 echo ""
 
 echo "=========================================="
 echo "Test Summary"
 echo "=========================================="
-echo "✓ Go unit tests: PASSED"
-echo "✓ Rust tests: PASSED"
-echo ""
-echo "All tests completed successfully!"
+echo "All tests completed!"

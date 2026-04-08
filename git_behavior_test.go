@@ -17,6 +17,16 @@ import (
 	"time"
 )
 
+// runGit 执行 git 命令并报告错误
+func runGit(t *testing.T, gitPath string, dir string, args ...string) {
+	cmd := exec.Command(gitPath, args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v failed: %s", args, output)
+	}
+}
+
 // TestGitBehaviorCloneEmptyRepo 测试克隆空仓库的行为
 func TestGitBehaviorCloneEmptyRepo(t *testing.T) {
 	if testing.Short() {
@@ -269,5 +279,3 @@ func TestGitBehaviorConcurrentAccess(t *testing.T) {
 		}
 	}
 }
-
-// TestGitBehaviorInterruptedTransfer 测试中
