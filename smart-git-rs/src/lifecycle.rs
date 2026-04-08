@@ -149,18 +149,18 @@ impl RepositoryLifecycleManager {
                 .map_err(to_internal)?;
         }
 
-        let outcome = if should_refresh {
-            let mirror_service = Arc::clone(&self.mirror_service);
-            let repo_id = repo_id.clone();
-            Some(
-                task::spawn_blocking(move || mirror_service.sync(&repo_id))
-                    .await
-                    .map_err(|error| to_internal(anyhow::anyhow!(error.to_string())))?
-                    .map_err(to_internal)?,
-            )
-        } else {
-            None
-        };
+	let outcome = if should_refresh {
+		let mirror_service = Arc::clone(&self.mirror_service);
+		let repo_id = repo_id.clone();
+		Some(
+			task::spawn_blocking(move || mirror_service.sync(&repo_id))
+				.await
+				.map_err(|error| to_internal(error.into()))?
+				.map_err(to_internal)?,
+		)
+	} else {
+		None
+	};
         let fresh_clone = outcome.as_ref().is_some_and(|outcome| outcome.fresh_clone);
         let cached_created_at = cached.as_ref().map(|record| record.created_at);
 

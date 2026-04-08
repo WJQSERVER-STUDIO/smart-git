@@ -20,7 +20,6 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/go-git/go-git/v6/storage"
 	"github.com/go-git/go-git/v6/utils/ioutil"
-	"github.com/infinite-iroha/touka"
 )
 
 const defaultChunkSize = 4096
@@ -42,9 +41,6 @@ func (f *flushResponseWriter) ReadFrom(r io.Reader) (int64, error) {
 			nw, writeErr := f.ResponseWriter.Write(p[:nr])
 			if writeErr != nil {
 				logf(f.log, "error writing response: %v", writeErr)
-				if !responseAlreadyStarted(f.ResponseWriter) {
-					renderStatusError(f.ResponseWriter, http.StatusInternalServerError)
-				}
 				return n, writeErr
 			}
 			if nr != nw {
@@ -54,9 +50,6 @@ func (f *flushResponseWriter) ReadFrom(r io.Reader) (int64, error) {
 			n += int64(nr)
 			if flushErr := flusher.Flush(); flushErr != nil {
 				logf(f.log, "error while flush: %v", flushErr)
-				if !responseAlreadyStarted(f.ResponseWriter) {
-					renderStatusError(f.ResponseWriter, http.StatusInternalServerError)
-				}
 				return n, fmt.Errorf("%w: error while flush", flushErr)
 			}
 		}
@@ -73,13 +66,6 @@ func (f *flushResponseWriter) ReadFrom(r io.Reader) (int64, error) {
 	}
 
 	return n, nil
-}
-
-func responseAlreadyStarted(w http.ResponseWriter) bool {
-	if tw, ok := w.(touka.ResponseWriter); ok {
-		return tw.Written() || tw.Size() > 0
-	}
-	return false
 }
 
 func (f *flushResponseWriter) Close() error {
