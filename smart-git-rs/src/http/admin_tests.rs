@@ -18,7 +18,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_cache_records_internal_error_should_not_map_to_bad_request() {
-        let state = broken_admin_state();
+        let (state, _dir) = broken_admin_state();
         let app = Router::new()
             .route("/api/db/data", get(admin::list_cache_records))
             .with_state(state);
@@ -47,7 +47,7 @@ mod tests {
         assert!(text.contains("error = "));
     }
 
-    fn broken_admin_state() -> AppState {
+    fn broken_admin_state() -> (AppState, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("admin-test.db");
         let db = Arc::new(Database::open(&db_path).unwrap());
@@ -95,10 +95,13 @@ mod tests {
             config.cache.refresh_ttl(),
         ));
 
-        AppState {
-            config,
-            db,
-            lifecycle,
-        }
+        (
+            AppState {
+                config,
+                db,
+                lifecycle,
+            },
+            dir,
+        )
     }
 }

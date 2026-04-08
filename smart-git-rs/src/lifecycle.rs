@@ -8,6 +8,7 @@ use std::{
 use gitserver_core::{discovery::RepoInfo, error::Error as GitServerError};
 use gitserver_http::{SharedState as GitHttpState, error::AppError};
 use tokio::sync::Mutex as AsyncMutex;
+use tokio::task;
 
 use crate::{db::Database, git::MirrorService, model::RepoCacheRecord, repo_id::RepoId};
 
@@ -149,7 +150,14 @@ impl RepositoryLifecycleManager {
         }
 
         let outcome = if should_refresh {
-            Some(self.mirror_service.sync(repo_id).map_err(to_internal)?)
+            let mirror_service = Arc::clone(&self.mirror_service);
+            let repo_id = repo_id.clone();
+            Some(
+                task::spawn_blocking(move || mirror_service.sync(&repo_id))
+                    .await
+                    .map_err(|error| to_internal(anyhow::anyhow!(error.to_string())))?
+                    .map_err(to_internal)?,
+            )
         } else {
             None
         };

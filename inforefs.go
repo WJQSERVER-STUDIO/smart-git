@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"smart-git/gitc"
@@ -29,7 +30,7 @@ func handleInfoRefs(baseRepoDir string) touka.HandlerFunc {
 			return
 		}
 
-		if err := ensureRepoReady(baseRepoDir, userName, repoName); err != nil {
+		if err := ensureRepoReady(ctx, baseRepoDir, userName, repoName); err != nil {
 			if err == plumbing.ErrReferenceNotFound {
 				c.ErrorUseHandle(http.StatusNotFound, err)
 				return
@@ -91,11 +92,11 @@ func handleInfoRefs(baseRepoDir string) touka.HandlerFunc {
 	}
 }
 
-func ensureRepoReady(baseRepoDir, userName, repoName string) error {
+func ensureRepoReady(ctx context.Context, baseRepoDir, userName, repoName string) error {
 	if err := AddRequestCount(userName, repoName); err != nil {
 		return err
 	}
 
 	gitURL := "https://github.com/" + userName + "/" + repoName
-	return gitc.EnsureRepoReady(baseRepoDir, userName, repoName, gitURL, cfg)
+	return gitc.EnsureRepoReady(ctx, baseRepoDir, userName, repoName, gitURL, cfg)
 }
