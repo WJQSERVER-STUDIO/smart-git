@@ -40,7 +40,7 @@ func serviceRPC(baseRepoDir string) touka.HandlerFunc {
 			return
 		}
 
-		if err := ensureRepoReady(baseRepoDir, userName, repoName); err != nil {
+		if err := ensureRepoReady(ctx, baseRepoDir, userName, repoName); err != nil {
 			if err == plumbing.ErrReferenceNotFound {
 				renderStatusError(w, http.StatusNotFound)
 				return

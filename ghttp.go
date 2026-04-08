@@ -41,7 +41,6 @@ func (f *flushResponseWriter) ReadFrom(r io.Reader) (int64, error) {
 			nw, writeErr := f.ResponseWriter.Write(p[:nr])
 			if writeErr != nil {
 				logf(f.log, "error writing response: %v", writeErr)
-				renderStatusError(f.ResponseWriter, http.StatusInternalServerError)
 				return n, writeErr
 			}
 			if nr != nw {
@@ -51,7 +50,6 @@ func (f *flushResponseWriter) ReadFrom(r io.Reader) (int64, error) {
 			n += int64(nr)
 			if flushErr := flusher.Flush(); flushErr != nil {
 				logf(f.log, "error while flush: %v", flushErr)
-				renderStatusError(f.ResponseWriter, http.StatusInternalServerError)
 				return n, fmt.Errorf("%w: error while flush", flushErr)
 			}
 		}

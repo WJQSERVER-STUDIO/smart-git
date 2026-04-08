@@ -1,6 +1,7 @@
 package gitc
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -33,12 +34,12 @@ type repoLockEntry struct {
 	refs int
 }
 
-func EnsureRepoReady(basedir string, userName string, repoName string, repoURL string, cfg *config.Config) error {
+func EnsureRepoReady(ctx context.Context, basedir string, userName string, repoName string, repoURL string, cfg *config.Config) error {
 	lockKey := userName + "/" + repoName
 	lock := acquireRepoLock(lockKey)
 	defer releaseRepoLock(lockKey, lock)
 
-	return syncRepoLocked(basedir, userName, repoName, repoURL, cfg)
+	return syncRepoLocked(ctx, basedir, userName, repoName, repoURL, cfg)
 }
 
 func RecoverPendingRepos(cfg *config.Config) error {
@@ -76,7 +77,7 @@ func RecoverPendingRepos(cfg *config.Config) error {
 	return nil
 }
 
-func syncRepoLocked(basedir string, userName string, repoName string, repoURL string, cfg *config.Config) error {
+func syncRepoLocked(ctx context.Context, basedir string, userName string, repoName string, repoURL string, cfg *config.Config) error {
 	localPath := filepath.Join(basedir, userName, repoName)
 	repoData, exists, err := GetRepoData(userName, repoName)
 	if err != nil {
@@ -106,7 +107,7 @@ func syncRepoLocked(basedir string, userName string, repoName string, repoURL st
 			logInfo("仓库 '%s' 已经存在且在有效期内。\n", localPath)
 			return nil
 		}
-		return refreshExistingRepo(localPath, repoURL, userName, repoName, cfg, repoData)
+		return refreshExistingRepo(ctx, localPath, repoURL, userName, repoName, cfg, repoData)
 	}
 
 	if !exists && repoIsUsable(localPath) {
@@ -135,7 +136,7 @@ func syncRepoLocked(basedir string, userName string, repoName string, repoURL st
 		return err
 	}
 
-	_, err = git.PlainClone(localPath, &git.CloneOptions{
+	_, err = git.PlainCloneContext(ctx, localPath, &git.CloneOptions{
 		URL:      repoURL,
 		Progress: os.Stdout,
 		Mirror:   true,
@@ -157,7 +158,7 @@ func syncRepoLocked(basedir string, userName string, repoName string, repoURL st
 	return finalizeSyncedRepo(localPath, repoURL, userName, repoName, cfg.Cache.Expire)
 }
 
-func refreshExistingRepo(localPath string, repoURL string, userName string, repoName string, cfg *config.Config, repoData *schema.RepoData) error {
+func refreshExistingRepo(ctx context.Context, localPath string, repoURL string, userName string, repoName string, cfg *config.Config, repoData *schema.RepoData) error {
 	if err := SavePendingRepoData(repoURL, userName, repoName, localPath); err != nil {
 		return err
 	}
@@ -180,7 +181,7 @@ func refreshExistingRepo(localPath string, repoURL string, userName string, repo
 		return err
 	}
 
-	fetchErr := remote.Fetch(&git.FetchOptions{
+	fetchErr := remote.FetchContext(ctx, &git.FetchOptions{
 		RemoteName: "origin",
 		RefSpecs: []gconfig.RefSpec{
 			gconfig.RefSpec("+refs/*:refs/*"),
