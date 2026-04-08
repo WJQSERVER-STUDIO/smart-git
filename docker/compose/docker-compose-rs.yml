@@ -1,0 +1,11 @@
+version: '3.9'
+services:
+    smart-git-rs:
+        image: 'wjqserver/smart-git-rs:latest'
+        restart: always
+        volumes:
+            - './smart-git-rs/config:/data/smart-git/config'
+            - './smart-git-rs/repos:/data/smart-git/repos'
+            - './smart-git-rs/db:/data/smart-git/db'
+        ports:
+            - '8080:8080'
