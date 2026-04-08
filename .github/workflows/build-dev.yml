@@ -18,7 +18,8 @@ jobs:
           if [ -f DEV-VERSION ]; then
             echo "VERSION=$(cat DEV-VERSION)" >> $GITHUB_ENV
           else
-            echo "DEV-VERSION file not found!" && exit 1
+            echo "DEV-VERSION file not found!"
+            false
           fi
       - name: 输出版本号
         run: | 
@@ -34,8 +35,6 @@ jobs:
           allowUpdates: true
           prerelease: true
           body: ${{ env.VERSION }}
-        env:
-          export PATH: $PATH:/usr/local/go/bin
 
   build:
     runs-on: ubuntu-latest
@@ -57,7 +56,8 @@ jobs:
           if [ -f DEV-VERSION ]; then
             echo "VERSION=$(cat DEV-VERSION)" >> $GITHUB_ENV
           else
-            echo "DEV-VERSION file not found!" && exit 1
+            echo "DEV-VERSION file not found!"
+            false
           fi
       - name: Set up Go
         uses: actions/setup-go@v3
@@ -72,7 +72,6 @@ jobs:
       - name: Package
         run: |
           mkdir ${{ env.OUTPUT_BINARY }}d
-          echo ${{ env.OUTPUT_BINARY }}d
           cp -v ${{ env.OUTPUT_BINARY }}-${{matrix.goos}}-${{matrix.goarch}} ./${{ env.OUTPUT_BINARY }}d/
           mv ./${{ env.OUTPUT_BINARY }}d/${{ env.OUTPUT_BINARY }}-${{matrix.goos}}-${{matrix.goarch}} ./${{ env.OUTPUT_BINARY }}d/${{ env.OUTPUT_BINARY }}
           cp -v LICENSE ./${{ env.OUTPUT_BINARY }}d/
@@ -96,8 +95,6 @@ jobs:
           allowUpdates: true
           prerelease: true
           body: ${{ env.VERSION }}
-        env:
-          export PATH: $PATH:/usr/local/go/bin            
 
   docker:
     runs-on: ubuntu-latest
@@ -116,7 +113,8 @@ jobs:
           if [ -f DEV-VERSION ]; then
             echo "VERSION=$(cat DEV-VERSION)" >> $GITHUB_ENV
           else
-            echo "DEV-VERSION file not found!" && exit 1
+            echo "DEV-VERSION file not found!"
+            false
           fi         
 
       - name: Set up QEMU
@@ -138,5 +136,48 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: | 
+            ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+            ${{ env.IMAGE_NAME }}:dev
+
+  docker-rs:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: wjqserver/smart-git-rs
+      DOCKERFILE: smart-git-rs/Dockerfile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+      - name: Load VERSION
+        run: |
+          if [ -f DEV-VERSION ]; then
+            echo "VERSION=$(cat DEV-VERSION)" >> $GITHUB_ENV
+          else
+            echo "DEV-VERSION file not found!"
+            false
+          fi
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 构建镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: ./smart-git-rs
+          file: ./${{ env.DOCKERFILE }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
             ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
             ${{ env.IMAGE_NAME }}:dev
