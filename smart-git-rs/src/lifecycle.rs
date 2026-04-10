@@ -1,0 +1,385 @@
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::{Arc, Mutex, Weak},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
+use gitserver_core::{discovery::RepoInfo, error::Error as GitServerError};
+use gitserver_http::{SharedState as GitHttpState, error::AppError};
+use tokio::sync::Mutex as AsyncMutex;
+use tokio::task;
+
+use crate::{db::Database, git::MirrorService, model::RepoCacheRecord, repo_id::RepoId};
+
+pub struct RepositoryLifecycleManager {
+    db: Arc<Database>,
+    mirror_service: Arc<MirrorService>,
+    git_http_state: GitHttpState,
+    refresh_ttl: Duration,
+    repo_locks: Mutex<HashMap<String, Weak<AsyncMutex<()>>>>,
+}
+
+impl RepositoryLifecycleManager {
+    pub fn new(
+        db: Arc<Database>,
+        mirror_service: Arc<MirrorService>,
+        git_http_state: GitHttpState,
+        refresh_ttl: Duration,
+    ) -> Self {
+        Self {
+            db,
+            mirror_service,
+            git_http_state,
+            refresh_ttl,
+            repo_locks: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn git_http_state(&self) -> &GitHttpState {
+        &self.git_http_state
+    }
+
+    pub async fn sync_for_request(&self, repo_id: &RepoId) -> Result<SyncRegistration, AppError> {
+        self.sync_with_policy(repo_id, SyncTrigger::Request, RefreshPolicy::Ttl)
+            .await
+    }
+
+    pub async fn sync_manual(&self, repo_id: &RepoId) -> Result<SyncRegistration, AppError> {
+        self.sync_with_policy(repo_id, SyncTrigger::Manual, RefreshPolicy::Force)
+            .await
+    }
+
+    pub async fn refresh_stale_repos(&self) -> anyhow::Result<usize> {
+        let now = unix_timestamp()?;
+        let stale_before = now - self.refresh_ttl.as_secs() as i64;
+        let stale_records = self.db.list_stale_cache_records(stale_before)?;
+        let mut refreshed = 0usize;
+
+        for record in stale_records {
+            let repo_id = RepoId::new(record.owner, record.name)?;
+            match self
+                .sync_with_policy(&repo_id, SyncTrigger::Background, RefreshPolicy::Ttl)
+                .await
+            {
+                Ok(outcome) if outcome.refreshed => refreshed += 1,
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(
+                        owner = repo_id.owner(),
+                        repo = repo_id.name(),
+                        error = ?error,
+                        "background refresh failed"
+                    );
+                }
+            }
+        }
+
+        Ok(refreshed)
+    }
+
+    pub async fn recover_pending(&self) -> anyhow::Result<()> {
+        let pending = self.db.list_pending_records()?;
+        for record in pending {
+            let repo_id = RepoId::new(record.owner.clone(), record.name.clone())?;
+            let path = Path::new(&record.local_path);
+
+            if !local_repo_is_usable(&record.local_path) {
+                self.db.delete_cache_record(&repo_id)?;
+                continue;
+            }
+
+            let recovered = RepoCacheRecord {
+                head_oid: local_repo_head_oid(path),
+                status: "synced".to_owned(),
+                ..record
+            };
+
+            self.db
+                .apply_lifecycle_update(&repo_id, Some(&recovered), false, false)?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn recover_registered_repos(&self) -> anyhow::Result<()> {
+        let synced = self.db.list_synced_records()?;
+        for record in synced {
+            if !local_repo_is_usable(&record.local_path) {
+                continue;
+            }
+
+            let repo_info = repo_info_from_record(&record);
+            match self.git_http_state.register_repo(repo_info) {
+                Ok(()) => {}
+                Err(GitServerError::Protocol(message))
+                    if message.starts_with("repository already registered:") => {}
+                Err(error) => return Err(anyhow::anyhow!(error.to_string())),
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn sync_with_policy(
+        &self,
+        repo_id: &RepoId,
+        trigger: SyncTrigger,
+        refresh_policy: RefreshPolicy,
+    ) -> Result<SyncRegistration, AppError> {
+        let repo_lock = self.repo_lock(repo_id);
+        let _guard = repo_lock.lock().await;
+
+        let cached = match self.db.get_cache_record(repo_id).map_err(to_internal)? {
+            Some(record) => Some(record),
+            None => self.repair_missing_record(repo_id).map_err(to_internal)?,
+        };
+        let should_refresh = self.should_refresh(cached.as_ref(), refresh_policy)?;
+
+        if should_refresh {
+            let pending = pending_record(
+                repo_id,
+                cached.as_ref(),
+                self.mirror_service.as_ref(),
+                self.refresh_ttl,
+            )
+                .map_err(to_internal)?;
+            self.db
+                .apply_lifecycle_update(repo_id, Some(&pending), false, false)
+                .map_err(to_internal)?;
+        }
+
+	let outcome = if should_refresh {
+		let mirror_service = Arc::clone(&self.mirror_service);
+		let repo_id = repo_id.clone();
+		Some(
+			task::spawn_blocking(move || mirror_service.sync(&repo_id))
+				.await
+				.map_err(|error| to_internal(error.into()))?
+				.map_err(to_internal)?,
+		)
+	} else {
+		None
+	};
+        let fresh_clone = outcome.as_ref().is_some_and(|outcome| outcome.fresh_clone);
+        let cached_created_at = cached.as_ref().map(|record| record.created_at);
+
+        let record = match (cached, outcome) {
+            (Some(record), None) => record,
+            (_, Some(outcome)) => RepoCacheRecord {
+                owner: repo_id.owner().to_owned(),
+                name: repo_id.name().to_owned(),
+                upstream_url: outcome.upstream_url,
+                local_path: outcome.local_path.display().to_string(),
+                head_oid: outcome.head_oid,
+                created_at: cached_created_at.unwrap_or(unix_timestamp().map_err(to_internal)?),
+                updated_at: unix_timestamp().map_err(to_internal)?,
+                expires_at: repo_expiry_timestamp(self.refresh_ttl).map_err(to_internal)?,
+                status: "synced".to_owned(),
+            },
+            (None, None) => {
+                return Err(AppError::Internal(
+                    "cache state inconsistent: missing repo without refresh".to_owned(),
+                ));
+            }
+        };
+
+        self.db
+            .apply_lifecycle_update(
+                repo_id,
+                should_refresh.then_some(&record),
+                trigger.count_request(),
+                fresh_clone,
+            )
+            .map_err(to_internal)?;
+
+        let repo_info = repo_info_from_record(&record);
+        match self.git_http_state.register_repo(repo_info.clone()) {
+            Ok(()) => {}
+            Err(GitServerError::Protocol(message))
+                if message.starts_with("repository already registered:") => {}
+            Err(error) => return Err(error.into()),
+        }
+
+        Ok(SyncRegistration {
+            record,
+            repo_info,
+            fresh_clone,
+            refreshed: should_refresh,
+        })
+    }
+
+    fn should_refresh(
+        &self,
+        record: Option<&RepoCacheRecord>,
+        refresh_policy: RefreshPolicy,
+    ) -> Result<bool, AppError> {
+        if matches!(refresh_policy, RefreshPolicy::Force) {
+            return Ok(true);
+        }
+
+        let Some(record) = record else {
+            return Ok(true);
+        };
+
+        if record.status != "synced" {
+            return Ok(true);
+        }
+
+        if !local_repo_is_usable(&record.local_path) {
+            return Ok(true);
+        }
+
+        let now = unix_timestamp().map_err(to_internal)?;
+        Ok(now.saturating_sub(record.updated_at) >= self.refresh_ttl.as_secs() as i64)
+    }
+
+    fn repo_lock(&self, repo_id: &RepoId) -> Arc<AsyncMutex<()>> {
+        let key = format!("{}/{}", repo_id.owner(), repo_id.name());
+        let mut repo_locks = self
+            .repo_locks
+            .lock()
+            .expect("repo lifecycle lock map poisoned");
+        repo_locks.retain(|_, weak| weak.strong_count() > 0);
+        if let Some(weak) = repo_locks.get(&key) {
+            if let Some(arc) = weak.upgrade() {
+                return arc;
+            }
+        }
+        let lock = Arc::new(AsyncMutex::new(()));
+        repo_locks.insert(key, Arc::downgrade(&lock));
+        lock
+    }
+
+    fn repair_missing_record(&self, repo_id: &RepoId) -> anyhow::Result<Option<RepoCacheRecord>> {
+        let local_path = self.mirror_service.local_path(repo_id);
+        if !local_repo_is_usable(&local_path.display().to_string()) {
+            return Ok(None);
+        }
+
+        let record = RepoCacheRecord {
+            owner: repo_id.owner().to_owned(),
+            name: repo_id.name().to_owned(),
+            upstream_url: self.mirror_service.upstream_url(repo_id),
+            local_path: local_path.display().to_string(),
+            head_oid: local_repo_head_oid(&local_path),
+            created_at: unix_timestamp()?,
+            updated_at: unix_timestamp()?,
+            expires_at: repo_expiry_timestamp(self.refresh_ttl)?,
+            status: "synced".to_owned(),
+        };
+
+        self.db
+            .apply_lifecycle_update(repo_id, Some(&record), false, false)?;
+
+        Ok(Some(record))
+    }
+}
+
+pub struct SyncRegistration {
+    pub record: RepoCacheRecord,
+    pub repo_info: RepoInfo,
+    pub fresh_clone: bool,
+    pub refreshed: bool,
+}
+
+#[derive(Copy, Clone)]
+enum SyncTrigger {
+    Request,
+    Manual,
+    Background,
+}
+
+impl SyncTrigger {
+    fn count_request(self) -> bool {
+        matches!(self, Self::Request | Self::Manual)
+    }
+}
+
+#[derive(Copy, Clone)]
+enum RefreshPolicy {
+    Ttl,
+    Force,
+}
+
+fn repo_info_from_record(record: &RepoCacheRecord) -> RepoInfo {
+    RepoInfo {
+        name: format!("{}.git", record.name),
+        relative_path: format!("{}/{}.git", record.owner, record.name),
+        absolute_path: std::path::PathBuf::from(&record.local_path),
+        description: None,
+    }
+}
+
+fn local_repo_is_usable(path: &str) -> bool {
+    let path = Path::new(path);
+    if !path.exists() {
+        return false;
+    }
+
+    match gix::open(path) {
+        Ok(repo) => repo.is_bare(),
+        Err(_) => false,
+    }
+}
+
+fn local_repo_head_oid(path: &Path) -> Option<String> {
+    gix::open(path)
+        .ok()
+        .filter(|repo| repo.is_bare())
+        .and_then(|repo| {
+            repo.head()
+                .ok()
+                .and_then(|head| head.id().map(|oid| oid.to_string()))
+        })
+}
+
+fn pending_record(
+    repo_id: &RepoId,
+    cached: Option<&RepoCacheRecord>,
+    mirror_service: &MirrorService,
+    refresh_ttl: Duration,
+) -> anyhow::Result<RepoCacheRecord> {
+    let updated_at = unix_timestamp()?;
+
+    Ok(match cached {
+        Some(record) => RepoCacheRecord {
+            owner: record.owner.clone(),
+            name: record.name.clone(),
+            upstream_url: record.upstream_url.clone(),
+            local_path: record.local_path.clone(),
+            head_oid: record.head_oid.clone(),
+            created_at: record.created_at,
+            updated_at,
+            expires_at: record.expires_at,
+            status: "pending".to_owned(),
+        },
+        None => RepoCacheRecord {
+            owner: repo_id.owner().to_owned(),
+            name: repo_id.name().to_owned(),
+            upstream_url: mirror_service.upstream_url(repo_id),
+            local_path: mirror_service.local_path(repo_id).display().to_string(),
+            head_oid: None,
+            created_at: updated_at,
+            updated_at,
+            expires_at: repo_expiry_timestamp(refresh_ttl)?,
+            status: "pending".to_owned(),
+        },
+    })
+}
+
+fn repo_expiry_timestamp(refresh_ttl: Duration) -> anyhow::Result<i64> {
+    Ok(unix_timestamp()? + refresh_ttl.as_secs() as i64)
+}
+
+fn unix_timestamp() -> anyhow::Result<i64> {
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| anyhow::anyhow!(error))?;
+    Ok(duration.as_secs() as i64)
+}
+
+fn to_internal(error: anyhow::Error) -> AppError {
+    tracing::error!(error = %error, "git mirror operation failed");
+    AppError::Internal("internal server error".to_owned())
+}

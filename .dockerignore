@@ -1,0 +1,9 @@
+.git
+.github
+gitcl
+docker/compose
+smart-git-rs/target
+target
+tmp
+*.log
+*.db

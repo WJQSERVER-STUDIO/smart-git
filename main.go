@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"smart-git/config"
 	"smart-git/database"
+	"smart-git/gitc"
+	"strings"
 
 	"github.com/WJQSERVER-STUDIO/logger"
 )
 
 var (
-	cfgfile string = "./config/config.toml"
+	cfgfile string = "./config/config"
 	cfg     *config.Config
 )
 
@@ -27,8 +30,13 @@ var (
 )
 
 func ReadFlag() {
-	cfgfilePtr := flag.String("cfg", "./config/config.toml", "config file path")
+	cfgfilePtr := flag.String("c", "./config/config", "config file path")
+	cfgfileCompatPtr := flag.String("cfg", "", "config file path (compat alias)")
 	flag.Parse()
+	if *cfgfileCompatPtr != "" {
+		cfgfile = *cfgfileCompatPtr
+		return
+	}
 	cfgfile = *cfgfilePtr
 }
 
@@ -49,8 +57,13 @@ func setMemLimit(cfg *config.Config) {
 	}
 }
 
-// init
-func init() {
+func bootstrap() error {
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(arg, "-test.") || arg == "-test.v" {
+			return nil
+		}
+	}
+
 	ReadFlag()
 	loadConfig()
 	setMemLimit(cfg)
@@ -58,25 +71,47 @@ func init() {
 	// 创建根目录 os
 	err := os.MkdirAll(cfg.Server.BaseDir, 0755)
 	if err != nil {
-		fmt.Printf("Fail to create dir: %v\n", err)
-		return
+		return fmt.Errorf("fail to create dir: %w", err)
+	}
+
+	if cfg.Log.LogFilePath != "" {
+		err = os.MkdirAll(filepath.Dir(cfg.Log.LogFilePath), 0755)
+		if err != nil {
+			return fmt.Errorf("fail to create log dir: %w", err)
+		}
+	}
+
+	if cfg.Database.Path != "" {
+		err = os.MkdirAll(filepath.Dir(cfg.Database.Path), 0755)
+		if err != nil {
+			return fmt.Errorf("fail to create db dir: %w", err)
+		}
 	}
 
 	err = logger.Init(cfg.Log.LogFilePath, cfg.Log.MaxLogSize)
 	if err != nil {
-		fmt.Printf("Fail to init logger: %v\n", err)
-		return
+		return fmt.Errorf("fail to init logger: %w", err)
 	}
 	if cfg.Log.Level != "" {
 		logger.SetLogLevel(cfg.Log.Level)
 	}
 
 	database.SetDBInfo(cfg)
+	if err := gitc.RecoverPendingRepos(cfg); err != nil {
+		return fmt.Errorf("fail to recover pending repos: %w", err)
+	}
+
+	return nil
 }
 
 func main() {
+	if err := bootstrap(); err != nil {
+		log.Fatalf("startup failed: %v", err)
+	}
 
-	defer database.DB.Close()
+	if database.DB != nil {
+		defer database.DB.Close()
+	}
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 

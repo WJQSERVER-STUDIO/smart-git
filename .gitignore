@@ -4,3 +4,5 @@ repos
 demo.toml
 *.db
 h2ctest
+smart-git-rs/target
+gitcl/

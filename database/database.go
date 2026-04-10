@@ -14,6 +14,7 @@ type DataAccess interface {
 	SaveData(*schema.RepoData) error
 	GetData(string, string) (*schema.RepoData, bool, error)
 	GetAllData() ([]schema.RepoData, error)
+	DeleteData(string, string) error
 
 	SaveSumData(*schema.RepoSumData) error
 	GetSumData(string, string) (*schema.RepoSumData, bool, error)

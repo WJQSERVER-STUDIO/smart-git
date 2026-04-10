@@ -1,7 +1,7 @@
 package bolt
 
 import (
-	"encoding/json"
+	"bytes"
 	"fmt"
 	"smart-git/database/schema"
 
@@ -32,8 +32,8 @@ func (s *Storage) SaveData(data *schema.RepoData) error {
 		// 使用数据制作key
 		key := data.RepoUser + "/" + data.RepoName
 
-		// 序列化为 JSON 格式
-		dataBytes, err := json.Marshal(data)
+		var buf bytes.Buffer
+		err := encodeRepoData(&buf, data)
 		if err != nil {
 			return err
 		}
@@ -45,7 +45,7 @@ func (s *Storage) SaveData(data *schema.RepoData) error {
 		}
 
 		// 根据 UUID 存储数据
-		return bucket.Put([]byte(key), dataBytes)
+		return bucket.Put([]byte(key), buf.Bytes())
 	})
 }
 
@@ -66,8 +66,8 @@ func (s *Storage) GetData(repoUser string, repoName string) (*schema.RepoData, b
 		}
 
 		// 反序列化 JSON 数据 (只有在 dataBytes != nil 时才执行)
-		if err := json.Unmarshal(dataBytes, &repoData); err != nil {
-			return fmt.Errorf("JSON 反序列化失败: %w", err) // JSON 反序列化错误
+		if err := decodeRepoData(bytes.NewReader(dataBytes), &repoData); err != nil {
+			return fmt.Errorf("RepoData gob 反序列化失败: %w", err)
 		}
 
 		found = true //  <--  在成功获取到 dataBytes 后，将 found 设置为 true
@@ -93,7 +93,7 @@ func (s *Storage) GetAllData() ([]schema.RepoData, error) {
 		cursor := bucket.Cursor()
 		for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
 			var record schema.RepoData
-			if err := json.Unmarshal(value, &record); err != nil {
+			if err := decodeRepoData(bytes.NewReader(value), &record); err != nil {
 				return err
 			}
 			records = append(records, record)
@@ -115,4 +115,15 @@ func (s *Storage) GetAllData() ([]schema.RepoData, error) {
 	}
 
 	return records, err
+}
+
+func (s *Storage) DeleteData(repoUser string, repoName string) error {
+	key := repoUser + "/" + repoName
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte(dataBucketName))
+		if bucket == nil {
+			return nil
+		}
+		return bucket.Delete([]byte(key))
+	})
 }
