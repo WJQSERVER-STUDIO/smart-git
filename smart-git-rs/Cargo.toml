@@ -24,3 +24,15 @@ wanf = "0.0.1"
 
 [dev-dependencies]
 tempfile = "3"
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.test]
+debug = "line-tables-only"
+
+[profile.test.package."*"]
+debug = false
