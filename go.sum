@@ -52,6 +52,8 @@ github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 h1:f+oWsMOmNPc8J
 github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8/go.mod h1:wcDNUvekVysuuOpQKo3191zZyTpiI6se1N1ULghS0sw=
 github.com/infinite-iroha/touka v0.5.1-0.20260407125447-efa1e3fb3fc3 h1:mAM+5j9c+AMi7QAWkUxHB8Uk++oUl557xytU75plAnA=
 github.com/infinite-iroha/touka v0.5.1-0.20260407125447-efa1e3fb3fc3/go.mod h1:6s1oUso8IQp9MbJ+hDvxx8AodbOF7YMel2DnW/x0qrg=
+github.com/infinite-iroha/touka v0.5.1-0.20260409232140-271e54eb4d44 h1:VcFNhePZe8qhc9M3Qd0HzV6LjU3QCXxWjQokgFlp3TU=
+github.com/infinite-iroha/touka v0.5.1-0.20260409232140-271e54eb4d44/go.mod h1:6s1oUso8IQp9MbJ+hDvxx8AodbOF7YMel2DnW/x0qrg=
 github.com/kevinburke/ssh_config v1.6.0 h1:J1FBfmuVosPHf5GRdltRLhPJtJpTlMdKTBjRgTaQBFY=
 github.com/kevinburke/ssh_config v1.6.0/go.mod h1:q2RIzfka+BXARoNexmF9gkxEX7DmvbW9P4hIVx2Kg4M=
 github.com/klauspost/compress v1.18.5 h1:/h1gH5Ce+VWNLSWqPzOVn6XBO+vJbCNGvjoaGBFW2IE=
