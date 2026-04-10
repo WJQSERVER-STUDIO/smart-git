@@ -12,6 +12,7 @@ Smart-Git 是一个高性能的 Git Smart HTTP 转发与缓存服务，旨在加
 - **轻量存储**: 使用 [BoltDB](https://go.etcd.io/bbolt) 管理元数据，单文件数据库，部署简便。
 
 ### Rust 版本 (`smart-git-rs`)
+- **Git 协议与 HTTP 基础能力**: 基于 [gitserver](https://github.com/WJQSERVER/gitserver) 提供 Rust 版本的 Git 协议处理与 HTTP 层支持。
 - **现代异步**: 基于 [Axum](https://github.com/tokio-rs/axum) 和 [Tokio](https://github.com/tokio-rs/tokio) 栈，资源占用低且并发性强。
 - **稳健的 Git 引擎**: 采用 [Gix](https://github.com/Byron/gitoxide) (Gitoxide) 引擎，提供更快的克隆与同步速度。
 - **自动刷新**: 引入后台扫描任务，根据 TTL 自动更新过期仓库。
@@ -52,5 +53,6 @@ Go 与 Rust 两个实现的示例配置、TOML/WANF 对照和字段说明见 [do
 - [Touka](https://github.com/infinite-iroha/touka)
 - [Go-Git](https://github.com/go-git/go-git)
 - [Gix (Gitoxide)](https://github.com/Byron/gitoxide)
+- [gitserver](https://github.com/WJQSERVER/gitserver) (Rust 版本的 Git 协议与 HTTP 层能力支持)
 - [WANF](https://github.com/WJQSERVER/wanf)
 - [erred/gitreposerver](https://github.com/erred/gitreposerver) (Smart HTTP 实现参考)
