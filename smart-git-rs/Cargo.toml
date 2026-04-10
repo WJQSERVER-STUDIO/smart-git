@@ -7,8 +7,8 @@ edition = "2024"
 anyhow = "1"
 axum = { version = "0.8.8", features = ["macros"] }
 clap = { version = "4.6.0", features = ["derive"] }
-gitserver-core = "0.0.1"
-gitserver-http = "0.0.1"
+gitserver-core = "0.0.3"
+gitserver-http = "0.0.3"
 gix = { version = "0.81.0", features = ["blocking-network-client"] }
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }

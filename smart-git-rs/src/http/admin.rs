@@ -122,6 +122,13 @@ impl ApiError {
         }
     }
 
+    fn service_unavailable(error: impl Into<anyhow::Error>) -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            error: error.into(),
+        }
+    }
+
     fn internal(error: impl Into<anyhow::Error>) -> Self {
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,
@@ -149,6 +156,9 @@ fn api_error_from_git(error: GitHttpAppError) -> ApiError {
     match error {
         GitHttpAppError::NotFound(message) => ApiError::not_found(anyhow::anyhow!(message)),
         GitHttpAppError::BadRequest(message) => ApiError::bad_request(anyhow::anyhow!(message)),
+        GitHttpAppError::ServiceUnavailable(message) => {
+            ApiError::service_unavailable(anyhow::anyhow!(message))
+        }
         GitHttpAppError::Internal(message) => ApiError::internal(anyhow::anyhow!(message)),
         GitHttpAppError::Unauthorized => {
             ApiError::unauthorized(anyhow::anyhow!("authentication required"))
