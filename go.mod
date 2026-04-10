@@ -10,7 +10,7 @@ require (
 	github.com/fenthope/record v0.0.4
 	github.com/go-git/go-billy/v6 v6.0.0-20260407080855-6d0bae538e73
 	github.com/go-git/go-git/v6 v6.0.0-alpha.1
-	github.com/infinite-iroha/touka v0.5.1-0.20260407125447-efa1e3fb3fc3
+	github.com/infinite-iroha/touka v0.5.1-0.20260409232140-271e54eb4d44
 )
 
 require (
