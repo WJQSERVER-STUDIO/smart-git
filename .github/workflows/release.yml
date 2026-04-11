@@ -1,0 +1,340 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to publish (for example v2.0.0)
+        required: true
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  meta:
+    name: Resolve Release Metadata
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - name: Derive release metadata
+        id: meta
+        env:
+          INPUT_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || '' }}
+        run: |
+          TAG="${INPUT_TAG}"
+          if [ -z "$TAG" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          fi
+
+          case "$TAG" in
+            v*) ;;
+            *)
+              echo "release tag must start with v, got: $TAG" >&2
+              exit 1
+              ;;
+          esac
+
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  go-build:
+    name: Build Go ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: meta
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            asset_name: smart-git-linux-amd64.tar.gz
+          - goos: linux
+            goarch: arm64
+            asset_name: smart-git-linux-arm64.tar.gz
+          - goos: darwin
+            goarch: amd64
+            asset_name: smart-git-darwin-amd64.tar.gz
+          - goos: darwin
+            goarch: arm64
+            asset_name: smart-git-darwin-arm64.tar.gz
+          - goos: freebsd
+            goarch: amd64
+            asset_name: smart-git-freebsd-amd64.tar.gz
+          - goos: freebsd
+            goarch: arm64
+            asset_name: smart-git-freebsd-arm64.tar.gz
+    env:
+      OUTPUT_BINARY: smart-git
+      ASSET_NAME: ${{ matrix.asset_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.tag }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          CGO_ENABLED=0 go build -ldflags "-s -w" -o "${OUTPUT_BINARY}" .
+
+      - name: Package
+        run: |
+          rm -rf package
+          mkdir package
+          cp "${OUTPUT_BINARY}" package/${OUTPUT_BINARY}
+          cp LICENSE package/
+          tar -czf "${ASSET_NAME}" -C package .
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ASSET_NAME }}
+          path: ./${{ env.ASSET_NAME }}
+
+  rust-build:
+    name: Build Rust ${{ matrix.target }}
+    needs: meta
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary_name: smart-git-rs
+            asset_name: smart-git-rs-linux-amd64-gnu.tar.gz
+            archive_format: tar.gz
+            cross: false
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            binary_name: smart-git-rs
+            asset_name: smart-git-rs-linux-amd64-musl.tar.gz
+            archive_format: tar.gz
+            cross: true
+          - runner: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            binary_name: smart-git-rs
+            asset_name: smart-git-rs-linux-arm64-gnu.tar.gz
+            archive_format: tar.gz
+            cross: true
+          - runner: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            binary_name: smart-git-rs
+            asset_name: smart-git-rs-linux-arm64-musl.tar.gz
+            archive_format: tar.gz
+            cross: true
+          - runner: macos-13
+            target: x86_64-apple-darwin
+            binary_name: smart-git-rs
+            asset_name: smart-git-rs-darwin-amd64.tar.gz
+            archive_format: tar.gz
+            cross: false
+          - runner: macos-14
+            target: aarch64-apple-darwin
+            binary_name: smart-git-rs
+            asset_name: smart-git-rs-darwin-arm64.tar.gz
+            archive_format: tar.gz
+            cross: false
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+            binary_name: smart-git-rs.exe
+            asset_name: smart-git-rs-windows-amd64.zip
+            archive_format: zip
+            cross: false
+    defaults:
+      run:
+        shell: bash
+    env:
+      BINARY_NAME: ${{ matrix.binary_name }}
+      TARGET: ${{ matrix.target }}
+      ASSET_NAME: ${{ matrix.asset_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.tag }}
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.TARGET }}
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: smart-git-rs -> target
+          key: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build release binary
+        run: |
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --manifest-path smart-git-rs/Cargo.toml --release --target "${TARGET}"
+          else
+            cargo build --manifest-path smart-git-rs/Cargo.toml --release --target "${TARGET}"
+          fi
+
+      - name: Package tarball
+        if: matrix.archive_format == 'tar.gz'
+        run: |
+          rm -rf package
+          mkdir package
+          cp "smart-git-rs/target/${TARGET}/release/${BINARY_NAME}" package/${BINARY_NAME}
+          cp LICENSE package/
+          tar -czf "${ASSET_NAME}" -C package .
+
+      - name: Package zip
+        if: matrix.archive_format == 'zip'
+        shell: pwsh
+        run: |
+          if (Test-Path package) { Remove-Item package -Recurse -Force }
+          New-Item -ItemType Directory -Path package | Out-Null
+          Copy-Item "smart-git-rs/target/$env:TARGET/release/$env:BINARY_NAME" "package/$env:BINARY_NAME"
+          Copy-Item "LICENSE" "package/LICENSE"
+          if (Test-Path $env:ASSET_NAME) { Remove-Item $env:ASSET_NAME -Force }
+          Compress-Archive -Path package/* -DestinationPath $env:ASSET_NAME
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ASSET_NAME }}
+          path: ./${{ env.ASSET_NAME }}
+
+  release:
+    name: Create Release
+    needs:
+      - meta
+      - go-build
+      - rust-build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          shopt -s nullglob
+          files=( *.tar.gz *.zip )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no release assets found" >&2
+            exit 1
+          fi
+          sha256sum "${files[@]}" > SHA256SUMS
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          name: ${{ needs.meta.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.zip
+            artifacts/SHA256SUMS
+
+  docker-go:
+    name: Publish Go Docker Image
+    needs:
+      - meta
+      - go-build
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: wjqserver/smart-git
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.tag }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Go image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/dockerfile/release/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ needs.meta.outputs.tag }}
+            ${{ env.IMAGE_NAME }}:latest
+
+  docker-rust:
+    name: Publish Rust Docker Image
+    needs:
+      - meta
+      - rust-build
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: wjqserver/smart-git-rs
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.tag }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Rust image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./smart-git-rs/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ needs.meta.outputs.tag }}
+            ${{ env.IMAGE_NAME }}:latest
