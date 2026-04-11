@@ -39,7 +39,7 @@
   - `healthz`
   - 元数据/统计接口
   - 手动 sync 接口
-  - 管理 API 默认输出 WANF
+  - 管理 API 当前统一输出 **WANF**
 - `smart-git-rs/src/http/git_http.rs`
   - `info/refs`
   - `git-upload-pack`
