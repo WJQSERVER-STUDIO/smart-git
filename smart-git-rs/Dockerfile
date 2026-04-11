@@ -2,13 +2,15 @@ FROM rust:1-alpine AS build
 
 WORKDIR /app
 
+ARG TARGETARCH
+
 RUN apk add --no-cache musl-dev build-base pkgconfig openssl-dev sqlite-dev
 
 COPY smart-git-rs/Cargo.toml smart-git-rs/Cargo.lock ./
 COPY smart-git-rs/src ./src
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/app/target \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/app/target,id=cargo-target-${TARGETARCH} \
     cargo build --release --locked
 
 FROM alpine:latest
