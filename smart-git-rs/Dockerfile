@@ -11,7 +11,8 @@ COPY smart-git-rs/src ./src
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
     --mount=type=cache,target=/app/target,id=cargo-target-${TARGETARCH} \
-    cargo build --release --locked
+    cargo build --release --locked && \
+    cp /app/target/release/smart-git-rs /app/smart-git-rs
 
 FROM alpine:latest
 
@@ -19,7 +20,7 @@ RUN apk add --no-cache ca-certificates
 
 WORKDIR /data/smart-git
 
-COPY --from=build /app/target/release/smart-git-rs /usr/local/bin/smart-git-rs
+COPY --from=build /app/smart-git-rs /usr/local/bin/smart-git-rs
 COPY smart-git-rs/config.wanf /data/smart-git/config.wanf
 
 EXPOSE 8080
