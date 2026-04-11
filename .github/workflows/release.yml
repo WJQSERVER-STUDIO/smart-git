@@ -143,13 +143,13 @@ jobs:
             asset_name: smart-git-rs-linux-arm64-musl.tar.gz
             archive_format: tar.gz
             cross: true
-          - runner: macos-13
+          - runner: macos-15-intel
             target: x86_64-apple-darwin
             binary_name: smart-git-rs
             asset_name: smart-git-rs-darwin-amd64.tar.gz
             archive_format: tar.gz
             cross: false
-          - runner: macos-14
+          - runner: macos-15
             target: aarch64-apple-darwin
             binary_name: smart-git-rs
             asset_name: smart-git-rs-darwin-arm64.tar.gz

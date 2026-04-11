@@ -7,7 +7,9 @@ RUN apk add --no-cache musl-dev build-base pkgconfig openssl-dev sqlite-dev
 COPY smart-git-rs/Cargo.toml smart-git-rs/Cargo.lock ./
 COPY smart-git-rs/src ./src
 
-RUN cargo build --release --locked
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --locked
 
 FROM alpine:latest
 
