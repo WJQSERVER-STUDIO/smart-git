@@ -6,7 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/WJQSERVER-STUDIO/logger v1.8.0
 	github.com/WJQSERVER/wanf v0.0.8
-	github.com/fenthope/compress v0.0.3
+	github.com/fenthope/compress v0.0.4
 	github.com/fenthope/record v0.0.4
 	github.com/go-git/go-billy/v6 v6.0.0-20260407080855-6d0bae538e73
 	github.com/go-git/go-git/v6 v6.0.0-alpha.1
