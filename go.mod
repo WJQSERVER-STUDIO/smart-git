@@ -10,7 +10,7 @@ require (
 	github.com/fenthope/record v0.0.4
 	github.com/go-git/go-billy/v6 v6.0.0-20260407080855-6d0bae538e73
 	github.com/go-git/go-git/v6 v6.0.0-alpha.1
-	github.com/infinite-iroha/touka v0.5.1-0.20260409232140-271e54eb4d44
+	github.com/infinite-iroha/touka v0.5.1
 )
 
 require (
@@ -26,7 +26,6 @@ require (
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/text v0.35.0 // indirect
 )
 
 require (
