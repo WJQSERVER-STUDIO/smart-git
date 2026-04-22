@@ -10,12 +10,12 @@ require (
 	github.com/fenthope/record v0.0.4
 	github.com/go-git/go-billy/v6 v6.0.0-20260407080855-6d0bae538e73
 	github.com/go-git/go-git/v6 v6.0.0-alpha.1
-	github.com/infinite-iroha/touka v0.5.1-0.20260409232140-271e54eb4d44
+	github.com/infinite-iroha/touka v1.0.0
 )
 
 require (
 	github.com/WJQSERVER-STUDIO/go-utils/copyb v0.0.6 // indirect
-	github.com/WJQSERVER-STUDIO/go-utils/iox v0.0.2 // indirect
+	github.com/WJQSERVER-STUDIO/go-utils/iox v0.0.3 // indirect
 	github.com/WJQSERVER-STUDIO/go-utils/log v0.0.3 // indirect
 	github.com/WJQSERVER-STUDIO/httpc v0.9.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect

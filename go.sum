@@ -6,8 +6,8 @@ github.com/ProtonMail/go-crypto v1.4.1 h1:9RfcZHqEQUvP8RzecWEUafnZVtEvrBVL9BiF67
 github.com/ProtonMail/go-crypto v1.4.1/go.mod h1:e1OaTyu5SYVrO9gKOEhTc+5UcXtTUa+P3uLudwcgPqo=
 github.com/WJQSERVER-STUDIO/go-utils/copyb v0.0.6 h1:/50VJYXd6jcu+p5BnEBDyiX0nAyGxas1W3DCnrYMxMY=
 github.com/WJQSERVER-STUDIO/go-utils/copyb v0.0.6/go.mod h1:FZ6XE+4TKy4MOfX1xWKe6Rwsg0ucYFCdNh1KLvyKTfc=
-github.com/WJQSERVER-STUDIO/go-utils/iox v0.0.2 h1:AiIHXP21LpK7pFfqUlUstgQEWzjbekZgxOuvVwiMfyM=
-github.com/WJQSERVER-STUDIO/go-utils/iox v0.0.2/go.mod h1:mCLqYU32bTmEE6dpj37MKKiZgz70Jh/xyK9vVbq6pok=
+github.com/WJQSERVER-STUDIO/go-utils/iox v0.0.3 h1:Hc1O6D50U3URkdSzfQ/SgeUU750wUBCYhefdvAbE2Ck=
+github.com/WJQSERVER-STUDIO/go-utils/iox v0.0.3/go.mod h1:nFQzepAwwdj5Hp5U+X19l4FVvsaOSBTW41BzfI/CkMA=
 github.com/WJQSERVER-STUDIO/go-utils/log v0.0.3 h1:t6nyLhmo9pSfVHm1Wu1WyLsTpXFSjSpQtVKqEDpiZ5Q=
 github.com/WJQSERVER-STUDIO/go-utils/log v0.0.3/go.mod h1:j9Q+xnwpOfve7/uJnZ2izRQw6NNoXjvJHz7vUQAaLZE=
 github.com/WJQSERVER-STUDIO/httpc v0.9.0 h1:MpXcQQqukrSLHH/2tTfnXrhqD6nEDHB/gbzehXaS8o4=
@@ -50,10 +50,8 @@ github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433 h1:vymEbVw
 github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433/go.mod h1:tphK2c80bpPhMOI4v6bIc2xWywPfbqi1Z06+RcrMkDg=
 github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 h1:f+oWsMOmNPc8JmEHVZIycC7hBoQxHH9pNKQORJNozsQ=
 github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8/go.mod h1:wcDNUvekVysuuOpQKo3191zZyTpiI6se1N1ULghS0sw=
-github.com/infinite-iroha/touka v0.5.1-0.20260407125447-efa1e3fb3fc3 h1:mAM+5j9c+AMi7QAWkUxHB8Uk++oUl557xytU75plAnA=
-github.com/infinite-iroha/touka v0.5.1-0.20260407125447-efa1e3fb3fc3/go.mod h1:6s1oUso8IQp9MbJ+hDvxx8AodbOF7YMel2DnW/x0qrg=
-github.com/infinite-iroha/touka v0.5.1-0.20260409232140-271e54eb4d44 h1:VcFNhePZe8qhc9M3Qd0HzV6LjU3QCXxWjQokgFlp3TU=
-github.com/infinite-iroha/touka v0.5.1-0.20260409232140-271e54eb4d44/go.mod h1:6s1oUso8IQp9MbJ+hDvxx8AodbOF7YMel2DnW/x0qrg=
+github.com/infinite-iroha/touka v1.0.0 h1:n8cfq/mTicvzv0/WEsQrienIkdg+NuVZPvNVLJioTy4=
+github.com/infinite-iroha/touka v1.0.0/go.mod h1:fDCfTfRs50QfcTkSFdaeFufEd+vwNvxGbNMrOoE8tVA=
 github.com/kevinburke/ssh_config v1.6.0 h1:J1FBfmuVosPHf5GRdltRLhPJtJpTlMdKTBjRgTaQBFY=
 github.com/kevinburke/ssh_config v1.6.0/go.mod h1:q2RIzfka+BXARoNexmF9gkxEX7DmvbW9P4hIVx2Kg4M=
 github.com/klauspost/compress v1.18.5 h1:/h1gH5Ce+VWNLSWqPzOVn6XBO+vJbCNGvjoaGBFW2IE=
