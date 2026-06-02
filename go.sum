@@ -14,8 +14,8 @@ github.com/WJQSERVER-STUDIO/httpc v0.9.0 h1:MpXcQQqukrSLHH/2tTfnXrhqD6nEDHB/gbze
 github.com/WJQSERVER-STUDIO/httpc v0.9.0/go.mod h1:filzryrl4eAtFVyl4oVHcJqx1SpNFbrCn+ddQPLlCSg=
 github.com/WJQSERVER-STUDIO/logger v1.8.0 h1:AQ3Qe2kxiqpuOoDlRzseGP6u4LAaJc+ng4l8P+CK7Co=
 github.com/WJQSERVER-STUDIO/logger v1.8.0/go.mod h1:yzXPtot0OvR1gzx4+rlFrv/sccUpz0gIXVBwUx3H7fM=
-github.com/WJQSERVER/wanf v0.0.8 h1:1Ri9d7nKhu22hGxP8O9B9rXnYym6DYGKgi6WRVx3VF8=
-github.com/WJQSERVER/wanf v0.0.8/go.mod h1:R0Zw/1skEMVlQ9m5atbkmanlW+9h2bkdq7+wbPY+F/8=
+github.com/WJQSERVER/wanf v0.0.10 h1:WCRcioHJsmdmMiXmuh3aMtLWK+ymc72z4WeX03FKzac=
+github.com/WJQSERVER/wanf v0.0.10/go.mod h1:R0Zw/1skEMVlQ9m5atbkmanlW+9h2bkdq7+wbPY+F/8=
 github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be h1:9AeTilPcZAjCFIImctFaOjnTIavg87rW78vTPkQqLI8=
 github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be/go.mod h1:ySMOLuWl6zY27l47sB3qLNK6tF2fkHG55UZxx8oIVo4=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
@@ -50,8 +50,6 @@ github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433 h1:vymEbVw
 github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433/go.mod h1:tphK2c80bpPhMOI4v6bIc2xWywPfbqi1Z06+RcrMkDg=
 github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 h1:f+oWsMOmNPc8JmEHVZIycC7hBoQxHH9pNKQORJNozsQ=
 github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8/go.mod h1:wcDNUvekVysuuOpQKo3191zZyTpiI6se1N1ULghS0sw=
-github.com/infinite-iroha/touka v0.5.1-0.20260407125447-efa1e3fb3fc3 h1:mAM+5j9c+AMi7QAWkUxHB8Uk++oUl557xytU75plAnA=
-github.com/infinite-iroha/touka v0.5.1-0.20260407125447-efa1e3fb3fc3/go.mod h1:6s1oUso8IQp9MbJ+hDvxx8AodbOF7YMel2DnW/x0qrg=
 github.com/infinite-iroha/touka v0.5.1-0.20260409232140-271e54eb4d44 h1:VcFNhePZe8qhc9M3Qd0HzV6LjU3QCXxWjQokgFlp3TU=
 github.com/infinite-iroha/touka v0.5.1-0.20260409232140-271e54eb4d44/go.mod h1:6s1oUso8IQp9MbJ+hDvxx8AodbOF7YMel2DnW/x0qrg=
 github.com/kevinburke/ssh_config v1.6.0 h1:J1FBfmuVosPHf5GRdltRLhPJtJpTlMdKTBjRgTaQBFY=
